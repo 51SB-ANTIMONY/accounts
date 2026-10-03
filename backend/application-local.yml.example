@@ -1,0 +1,27 @@
+# 로컬 개발 설정 (Git 제외). 같은 폴더의 application-local.yml.example을 복사해서 만든다.
+# 이 파일은 backend/ 폴더(실행 위치)에 둔다. Spring Boot가 실행 위치의 설정 파일을 자동으로 읽고, JAR에는 들어가지 않는다.
+# 비밀 값은 운영과 다른, 로컬 전용 값을 쓴다.
+spring:
+  jpa:
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+  h2:
+    console:
+      enabled: true
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: <Google Client ID>
+            client-secret: <Google Client Secret>
+
+accounts:
+  clients:
+    blog:
+      # blog 서버 설정의 accounts.client-secret과 같은 값
+      client-secret: <blog 클라이언트의 Client Secret. 임의의 긴 문자열>
+  remember-me:
+    key: <로그인 상태 유지 쿠키 서명 키. 임의의 긴 문자열>

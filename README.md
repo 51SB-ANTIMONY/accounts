@@ -110,7 +110,7 @@ ID 토큰의 `sub`는 로그인 방식과 상관없이 **회원 id**입니다. `
 - Node.js 20 이상
 
 ### 설정 파일
-`backend/src/main/resources/application.yml`은 비밀 값이 들어가므로 Git에서 제외되어 있습니다. 같은 폴더의 `application.yml.example`을 복사해서 만들어 주세요.
+설정은 `application.yml`(공통), `application-prod.yml`(운영, 값은 환경 변수), 테스트용 `src/test/resources/application-test.yml`로 나뉩니다. 로컬 비밀 값은 Git에서 제외한 `backend/application-local.yml`에 둡니다. 같은 폴더의 `application-local.yml.example`을 복사해서 만들어 주세요. 프로필을 지정하지 않으면 `local` 프로필로 실행됩니다. 운영에 필요한 환경 변수는 `application-prod.yml` 맨 위에 적어 두었습니다.
 
 - `accounts.clients.blog.client-secret`: blog 앱의 Client Secret. blog 서버 설정에도 같은 값을 넣습니다.
 - Google Cloud Console의 OAuth 클라이언트에 승인된 리디렉션 URI `http://localhost:3001/login/oauth2/code/google`을 추가해야 합니다. (브라우저가 보는 주소가 Next.js이기 때문)

@@ -1,0 +1,21 @@
+# 운영 설정. SPRING_PROFILES_ACTIVE=prod로 켠다. 값은 모두 환경 변수로 받는다.
+#
+# 필요한 환경 변수
+#   DB_URL, DB_USERNAME, DB_PASSWORD     DB 접속 정보 (5-2에서 MySQL)
+#   ACCOUNTS_ISSUER                      예: https://accounts.antimony.kr
+#   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
+#   BLOG_CLIENT_SECRET                   blog 서버의 ACCOUNTS_CLIENT_SECRET과 같은 값
+#   BLOG_REDIRECT_URI                    예: https://blog.antimony.kr/login/oauth2/code/accounts
+#   BLOG_POST_LOGOUT_REDIRECT_URI        예: https://blog.antimony.kr/
+#   REMEMBER_ME_KEY                      로그인 상태 유지 쿠키 서명 키 (임의의 긴 문자열)
+spring:
+  datasource:
+    # 운영에서는 기본값(H2)을 쓰지 않는다. 설정하지 않으면 서버가 켜지지 않는다.
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+  jpa:
+    show-sql: false
+  h2:
+    console:
+      enabled: false

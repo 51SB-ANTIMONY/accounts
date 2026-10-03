@@ -1,0 +1,17 @@
+# 테스트 설정. build.gradle이 테스트할 때 test 프로필을 켠다.
+# 비밀 값은 테스트 전용 가짜 값이다. (실제 Google, blog와 통신하지 않는다)
+spring:
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: test-google-client-id
+            client-secret: test-google-client-secret
+
+accounts:
+  clients:
+    blog:
+      client-secret: test-blog-client-secret
+  remember-me:
+    key: test-remember-me-key
