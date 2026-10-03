@@ -1,6 +1,8 @@
 package kr.antimony.accounts.domain;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -20,8 +22,10 @@ public class EmailVerification {
     @Column(name = "id", updatable = false)
     private Long id;
 
+    // MySQL 전용 enum 타입 대신 문자열(VARCHAR)로 저장한다. 값이 늘어도 테이블을 바꿀 필요가 없다.
     @Enumerated(EnumType.STRING)
-    @Column(name = "purpose", nullable = false)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
+    @Column(name = "purpose", nullable = false, length = 20)
     private VerificationPurpose purpose;
 
     @Column(name = "email", nullable = false)
