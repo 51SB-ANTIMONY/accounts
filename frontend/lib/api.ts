@@ -77,6 +77,11 @@ export const api = {
   providers: () => request<Providers>("GET", "/api/auth/providers"),
   me: () => request<Me>("GET", "/api/me"),
   unlink: (provider: string) => request<void>("DELETE", `/api/me/identities/${provider}`),
+  checkMyUid: (uid: string) =>
+    request<{ status: "ok" | "invalid" | "taken"; message: string }>("GET", `/api/me/uid-availability?${new URLSearchParams({ uid })}`),
+  setCredentials: (uid: string, password: string) => request<void>("POST", "/api/me/credentials", { uid, password }),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<void>("PUT", "/api/me/password", { currentPassword, newPassword }),
 
   checkUid: (uid: string, email: string) =>
     request<{ status: "ok" | "invalid" | "taken"; message: string }>(

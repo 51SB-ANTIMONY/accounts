@@ -17,6 +17,12 @@ const LINK_ERRORS: Record<string, string> = {
   email_already_registered: "이미 같은 이메일로 가입한 계정이 있습니다.",
 };
 
+// 아이디·비밀번호 설정, 비밀번호 변경을 마치고 돌아왔을 때의 안내 (/account?done=...)
+const DONE_NOTICES: Record<string, string> = {
+  credentials: "아이디와 비밀번호를 설정했어요.",
+  password: "비밀번호를 바꿨어요.",
+};
+
 // 소셜 계정 연결을 시작할 때 기록해 두고, 돌아왔을 때 "연결했어요" 안내를 보여 준다.
 const LINKING_KEY = "account.linking";
 
@@ -35,7 +41,7 @@ export default function AccountView() {
   const router = useRouter();
   const [me, setMe] = useState<Me | null>(null);
   const [providers, setProviders] = useState<Providers | null>(null);
-  const [notice, setNotice] = useState("");
+  const [notice, setNotice] = useState(() => DONE_NOTICES[params.get("done") ?? ""] ?? "");
   const [errorText, setErrorText] = useState(() => {
     const code = params.get("error");
     return code ? (LINK_ERRORS[code] ?? "소셜 계정을 연결하지 못했습니다.") : "";
@@ -118,7 +124,14 @@ export default function AccountView() {
               </div>
               <div>
                 <dt>아이디</dt>
-                <dd>{me.uid}</dd>
+                {me.hasPassword ? (
+                  <dd>{me.uid}</dd>
+                ) : (
+                  <dd className="with-note">
+                    <span>{me.uid}</span>
+                    <span className="dd-note">자동으로 만든 아이디</span>
+                  </dd>
+                )}
               </div>
               <div>
                 <dt>이메일</dt>
@@ -136,8 +149,8 @@ export default function AccountView() {
                   <span>아이디·비밀번호</span>
                   <span className={me.hasPassword ? "method-status is-on" : "method-status"}>{me.hasPassword ? "사용 중" : "설정 안 됨"}</span>
                 </div>
-                <Link href="/reset-password" className="row-btn">
-                  {me.hasPassword ? "비밀번호 변경" : "비밀번호 설정"}
+                <Link href={me.hasPassword ? "/account/password" : "/account/credentials"} className="row-btn">
+                  {me.hasPassword ? "비밀번호 변경" : "아이디·비밀번호 설정"}
                 </Link>
               </li>
               {PROVIDERS.map((provider) => {
