@@ -8,17 +8,25 @@ import { NextResponse, type NextRequest } from "next/server";
 // Spring은 Forwarded가 있으면 X-Forwarded-*보다 먼저 쓴다.
 const backend = process.env.ACCOUNTS_BACKEND_URL ?? "http://localhost:9000";
 
-export function proxy(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname, search, host, protocol } = request.nextUrl;
   const headers = new Headers(request.headers);
   const originalHost = request.headers.get("host") ?? host; // accounts.antimony.kr, 로컬은 localhost:3001
   headers.set("forwarded", `host="${originalHost}";proto=${protocol.replace(":", "")}`);
+
+  // 첫 화면(/): 로그인되어 있으면 내 계정, 아니면 로그인 화면으로 보낸다.
+  // 화면을 띄우기 전에 서버에서 정해서, 내 계정 화면이 잠깐 보였다가 넘어가는 일이 없게 한다.
+  if (pathname === "/") {
+    const me = await fetch(new URL("/api/me", backend), { headers, cache: "no-store" }).catch(() => null);
+    return NextResponse.redirect(new URL(me?.ok ? "/account" : "/login", request.url));
+  }
 
   return NextResponse.rewrite(new URL(pathname + search, backend), { request: { headers } });
 }
 
 export const config = {
   matcher: [
+    "/", // 첫 화면: 로그인 여부에 따라 내 계정 또는 로그인 화면으로
     "/api/:path*", // 회원가입·계정 찾기·내 계정 API
     "/login/password", // 아이디·비밀번호 로그인 처리
     "/login/oauth2/:path*", // 소셜 로그인 콜백
