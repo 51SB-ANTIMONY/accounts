@@ -21,6 +21,7 @@ const LINK_ERRORS: Record<string, string> = {
 const DONE_NOTICES: Record<string, string> = {
   credentials: "아이디와 비밀번호를 설정했어요.",
   password: "비밀번호를 바꿨어요.",
+  email: "이메일을 바꿨어요.",
 };
 
 // 소셜 계정 연결을 시작할 때 기록해 두고, 돌아왔을 때 "연결했어요" 안내를 보여 준다.
@@ -135,7 +136,12 @@ export default function AccountView() {
               </div>
               <div>
                 <dt>이메일</dt>
-                <dd>{me.email ?? "등록 안 됨"}</dd>
+                <dd className="with-action">
+                  <span>{me.email ?? "등록 안 됨"}</span>
+                  <Link href="/account/email" className="dd-action">
+                    변경
+                  </Link>
+                </dd>
               </div>
             </dl>
           </section>

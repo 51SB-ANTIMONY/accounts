@@ -84,6 +84,8 @@ export const api = {
   setCredentials: (uid: string, password: string) => request<void>("POST", "/api/me/credentials", { uid, password }),
   changePassword: (currentPassword: string, newPassword: string) =>
     request<void>("PUT", "/api/me/password", { currentPassword, newPassword }),
+  sendEmailChangeCode: (email: string) => request<{ expiresIn: number }>("POST", "/api/me/email/code", { email }),
+  changeEmail: (code: string) => request<void>("PUT", "/api/me/email", { code }),
 
   checkUid: (uid: string, email: string) =>
     request<{ status: "ok" | "invalid" | "taken"; message: string }>(
