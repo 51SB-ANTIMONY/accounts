@@ -3,7 +3,7 @@ import { Suspense } from "react";
 import AuthShell from "@/components/AuthShell";
 import AccountView from "./AccountView";
 
-export const metadata: Metadata = { title: "내 계정 · ANTIMONY" };
+export const metadata: Metadata = { title: "Antimony My Account" };
 
 export default function AccountPage() {
   return (

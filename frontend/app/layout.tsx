@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "ANTIMONY 계정",
+  title: "Antimony",
   description: "ANTIMONY 통합 로그인",
 };
 
