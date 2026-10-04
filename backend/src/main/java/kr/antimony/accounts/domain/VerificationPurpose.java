@@ -4,5 +4,6 @@ package kr.antimony.accounts.domain;
 public enum VerificationPurpose {
     SIGNUP,          // 회원가입 이메일 인증
     FIND_ID,         // 아이디 찾기
-    RESET_PASSWORD   // 비밀번호 재설정
+    RESET_PASSWORD,  // 비밀번호 재설정
+    EMAIL_CHANGE     // 이메일 변경 (새 이메일 인증)
 }

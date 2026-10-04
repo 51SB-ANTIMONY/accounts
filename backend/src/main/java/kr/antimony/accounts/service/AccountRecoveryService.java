@@ -86,7 +86,11 @@ public class AccountRecoveryService {
     }
 
     // 앞 2자, 뒤 2자만 보여 준다. (antimony01 → an******01) 짧은 아이디는 앞뒤 1자씩
+    // 관리자의 1–2자 아이디는 첫 글자만 보여 준다. (s → s, sb → s*)
     static String maskUid(String uid) {
+        if (uid.length() <= 2) {
+            return uid.charAt(0) + "*".repeat(uid.length() - 1);
+        }
         int keep = uid.length() > 4 ? 2 : 1;
         return uid.substring(0, keep) + "*".repeat(uid.length() - keep * 2) + uid.substring(uid.length() - keep);
     }

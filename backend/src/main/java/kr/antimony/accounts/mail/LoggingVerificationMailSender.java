@@ -15,4 +15,9 @@ public class LoggingVerificationMailSender implements VerificationMailSender {
     public void send(String email, VerificationPurpose purpose, String code) {
         log.info("[개발용 메일] {} 인증번호 {} → {}", purpose, code, email);
     }
+
+    @Override
+    public void sendEmailChanged(String oldEmail, String newEmailMasked) {
+        log.info("[개발용 메일] 이메일 변경 안내 → {} (새 이메일 {})", oldEmail, newEmailMasked);
+    }
 }

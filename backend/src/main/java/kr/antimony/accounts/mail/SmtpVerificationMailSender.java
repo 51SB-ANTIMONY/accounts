@@ -35,11 +35,25 @@ public class SmtpVerificationMailSender implements VerificationMailSender {
         mailSender.send(message);
     }
 
+    @Override
+    public void sendEmailChanged(String oldEmail, String newEmailMasked) {
+        SimpleMailMessage message = new SimpleMailMessage();
+        if (StringUtils.hasText(from)) {
+            message.setFrom(from);
+        }
+        message.setTo(oldEmail);
+        message.setSubject("[ANTIMONY] 계정 이메일이 바뀌었어요");
+        message.setText("ANTIMONY 계정의 이메일이 " + newEmailMasked + "(으)로 바뀌었어요.\n\n"
+                + "직접 바꾸지 않으셨다면 계정이 다른 사람에게 사용되고 있을 수 있어요. 바로 비밀번호를 바꾸거나 운영자에게 알려 주세요.");
+        mailSender.send(message);
+    }
+
     private static String subject(VerificationPurpose purpose) {
         return switch (purpose) {
             case SIGNUP -> "회원가입 이메일 인증번호";
             case FIND_ID -> "아이디 찾기 인증번호";
             case RESET_PASSWORD -> "비밀번호 재설정 인증번호";
+            case EMAIL_CHANGE -> "이메일 변경 인증번호";
         };
     }
 }

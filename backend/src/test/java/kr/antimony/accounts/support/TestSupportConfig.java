@@ -39,12 +39,25 @@ public class TestSupportConfig {
             codes.put(purpose + ":" + email, code);
         }
 
+        // 이메일 변경 안내: 이전 이메일 → 가린 새 이메일
+        private final Map<String, String> emailChangedNotices = new ConcurrentHashMap<>();
+
+        @Override
+        public void sendEmailChanged(String oldEmail, String newEmailMasked) {
+            emailChangedNotices.put(oldEmail, newEmailMasked);
+        }
+
+        public String emailChangedNotice(String oldEmail) {
+            return emailChangedNotices.get(oldEmail);
+        }
+
         public String lastCode(VerificationPurpose purpose, String email) {
             return codes.get(purpose + ":" + email);
         }
 
         public void clear() {
             codes.clear();
+            emailChangedNotices.clear();
         }
     }
 

@@ -3,12 +3,14 @@ package kr.antimony.accounts.controller;
 import kr.antimony.accounts.domain.Admin;
 import kr.antimony.accounts.domain.AdminRole;
 import kr.antimony.accounts.domain.User;
+import kr.antimony.accounts.domain.VerificationPurpose;
 import kr.antimony.accounts.domain.UserIdentity;
 import kr.antimony.accounts.repository.AdminRepository;
 import kr.antimony.accounts.repository.UserIdentityRepository;
 import kr.antimony.accounts.repository.UserRepository;
 import kr.antimony.accounts.support.DatabaseCleaner;
 import kr.antimony.accounts.support.TestSupportConfig;
+import kr.antimony.accounts.support.TestSupportConfig.CapturingMailSender;
 import kr.antimony.accounts.support.TestUsers;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -18,6 +20,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import jakarta.servlet.http.Cookie;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -48,10 +51,12 @@ class AccountSettingsApiTest {
     @Autowired AdminRepository adminRepository;
     @Autowired PasswordEncoder passwordEncoder;
     @Autowired DatabaseCleaner databaseCleaner;
+    @Autowired CapturingMailSender mailSender;
 
     @BeforeEach
     void setUp() {
         databaseCleaner.clean();
+        mailSender.clear();
     }
 
     private User socialOnlyUser() {
@@ -225,5 +230,75 @@ class AccountSettingsApiTest {
                 .andExpect(jsonPath("$.adminRole").value("ADMIN"));
         mockMvc.perform(get("/api/me").with(authentication(TestUsers.loggedIn(member))))
                 .andExpect(jsonPath("$.adminRole").doesNotExist());
+    }
+
+    // 세션은 DB(Spring Session)에 저장되고 쿠키로 찾는다. 1단계 응답의 세션 쿠키를 2단계에 함께 보낸다.
+    private Cookie sendEmailCode(User user, String email, int expectedStatus) throws Exception {
+        return mockMvc.perform(post("/api/me/email/code").with(csrf()).with(authentication(TestUsers.loggedIn(user)))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"email\":\"" + email + "\"}"))
+                .andExpect(status().is(expectedStatus))
+                .andReturn().getResponse().getCookie("ACCOUNTS_SESSION");
+    }
+
+    private ResultActions sendEmailCodeExpecting(User user, String email) throws Exception {
+        return mockMvc.perform(post("/api/me/email/code").with(csrf()).with(authentication(TestUsers.loggedIn(user)))
+                .contentType(MediaType.APPLICATION_JSON).content("{\"email\":\"" + email + "\"}"));
+    }
+
+    private ResultActions changeEmail(User user, Cookie session, String code) throws Exception {
+        var request = put("/api/me/email").with(csrf()).with(authentication(TestUsers.loggedIn(user)))
+                .contentType(MediaType.APPLICATION_JSON).content("{\"code\":\"" + code + "\"}");
+        if (session != null) {
+            request.cookie(session);
+        }
+        return mockMvc.perform(request);
+    }
+
+    @DisplayName("이메일 변경: 새 이메일로 받은 인증번호로 바뀌고, 이전 이메일로 안내가 간다")
+    @Test
+    void changeEmailSucceeds() throws Exception {
+        User user = TestUsers.localUser(userRepository, passwordEncoder, "tester01", "old@antimony.kr", "테스터", "pass1234!");
+        Cookie session = sendEmailCode(user, "new@antimony.kr", 200);
+        assertThat(session).isNotNull();
+        String code = mailSender.lastCode(VerificationPurpose.EMAIL_CHANGE, "new@antimony.kr");
+
+        changeEmail(user, session, code).andExpect(status().isNoContent());
+
+        assertThat(userRepository.findById(user.getId()).orElseThrow().getEmail()).isEqualTo("new@antimony.kr");
+        assertThat(mailSender.emailChangedNotice("old@antimony.kr")).isEqualTo("n***@antimony.kr");
+    }
+
+    @DisplayName("이메일 변경 1단계: 지금 이메일과 같으면 400, 다른 회원의 이메일이면 409 (errors.email)")
+    @Test
+    void sendEmailCodeRejected() throws Exception {
+        User user = TestUsers.localUser(userRepository, passwordEncoder, "tester01", "me@antimony.kr", "테스터", "pass1234!");
+        TestUsers.localUser(userRepository, passwordEncoder, "other01", "taken@antimony.kr", "다른회원", "pass1234!");
+        sendEmailCodeExpecting(user, "me@antimony.kr")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.email").value("지금 쓰고 있는 이메일이에요."));
+        sendEmailCodeExpecting(user, "taken@antimony.kr")
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.errors.email").value("이미 다른 계정에서 쓰는 이메일이에요."));
+        sendEmailCodeExpecting(user, "not-an-email").andExpect(status().isBadRequest());
+    }
+
+    @DisplayName("이메일 변경 2단계: 인증번호가 틀리면 400(errors.code), 인증번호를 받지 않은 세션이면 400. 이메일은 그대로")
+    @Test
+    void changeEmailRejected() throws Exception {
+        User user = TestUsers.localUser(userRepository, passwordEncoder, "tester01", "old@antimony.kr", "테스터", "pass1234!");
+        Cookie session = sendEmailCode(user, "new@antimony.kr", 200);
+        String code = mailSender.lastCode(VerificationPurpose.EMAIL_CHANGE, "new@antimony.kr");
+        String wrong = code.equals("000000") ? "111111" : "000000";
+
+        changeEmail(user, session, wrong)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.code").value("인증번호가 일치하지 않아요. 다시 확인해 주세요."));
+        // 다른 세션(인증번호를 요청하지 않은 로그인)에서는 맞는 인증번호로도 바꿀 수 없다
+        changeEmail(user, null, code)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("인증번호를 먼저 받아 주세요."));
+
+        assertThat(userRepository.findById(user.getId()).orElseThrow().getEmail()).isEqualTo("old@antimony.kr");
+        assertThat(mailSender.emailChangedNotice("old@antimony.kr")).isNull();
     }
 }
