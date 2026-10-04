@@ -120,7 +120,7 @@ public class UserService {
                 .orElseThrow(() -> new BadRequestException("연결되지 않은 계정이에요."));
 
         if (!user.hasPassword() && userIdentityRepository.findByUserId(userId).size() == 1) {
-            throw new ConflictException("마지막 로그인 수단은 해제할 수 없어요. 비밀번호 찾기로 비밀번호를 먼저 설정해 주세요.");
+            throw new ConflictException("마지막 로그인 수단은 해제할 수 없어요. 아이디·비밀번호를 먼저 설정해 주세요.");
         }
         userIdentityRepository.delete(identity);
     }

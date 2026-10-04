@@ -50,4 +50,10 @@ public class User {
     public void changePassword(String passwordHash) {
         this.password = passwordHash;
     }
+
+    // 소셜로만 가입한 회원이 아이디와 비밀번호를 처음 정할 때
+    public void setCredentials(String uid, String passwordHash) {
+        this.uid = uid;
+        this.password = passwordHash;
+    }
 }

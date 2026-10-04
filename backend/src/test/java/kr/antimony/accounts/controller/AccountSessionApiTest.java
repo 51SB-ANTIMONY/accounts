@@ -98,7 +98,7 @@ class AccountSessionApiTest {
         userIdentityRepository.save(new UserIdentity(socialOnly, "google", "google-sub-2"));
         mockMvc.perform(delete("/api/me/identities/google").with(csrf()).with(authentication(TestUsers.loggedIn(socialOnly))))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.message").value("마지막 로그인 수단은 해제할 수 없어요. 비밀번호 찾기로 비밀번호를 먼저 설정해 주세요."));
+                .andExpect(jsonPath("$.message").value("마지막 로그인 수단은 해제할 수 없어요. 아이디·비밀번호를 먼저 설정해 주세요."));
     }
 
     @DisplayName("로그인: 성공하면 /account로, 실패하면 /login?error=bad_credentials로 보낸다.")
