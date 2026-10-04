@@ -17,6 +17,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
@@ -45,6 +46,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class AccountSessionApiTest {
 
     @Autowired MockMvc mockMvc;
+    @Autowired JdbcTemplate jdbcTemplate;
     @Autowired ObjectMapper objectMapper;
     @Autowired UserRepository userRepository;
     @Autowired UserIdentityRepository userIdentityRepository;
@@ -108,6 +110,23 @@ class AccountSessionApiTest {
                 .andExpect(redirectedUrl("/account"));
         mockMvc.perform(formLogin("/login/password").user("tester01").password("wrong"))
                 .andExpect(redirectedUrl("/login?error=bad_credentials"));
+    }
+
+    @DisplayName("세션: 로그인 정보는 서버 메모리가 아니라 DB(SPRING_SESSION)에 저장되고, 쿠키 이름은 ACCOUNTS_SESSION이다.")
+    @Test
+    void sessionStoredInDatabase() throws Exception {
+        TestUsers.localUser(userRepository, passwordEncoder, "tester01", "a@antimony.kr", "테스터", "pass1234!");
+        // 같은 Spring 컨텍스트를 쓰는 다른 테스트의 세션도 남아 있으므로, 로그인 전후의 개수 차이로 확인한다.
+        String countSql = "select count(*) from SPRING_SESSION where PRINCIPAL_NAME = 'tester01'";
+        Integer before = jdbcTemplate.queryForObject(countSql, Integer.class);
+
+        mockMvc.perform(post("/login/password").with(csrf())
+                        .param("username", "tester01")
+                        .param("password", "pass1234!"))
+                .andExpect(redirectedUrl("/account"))
+                .andExpect(cookie().exists("ACCOUNTS_SESSION"));
+
+        assertThat(jdbcTemplate.queryForObject(countSql, Integer.class)).isEqualTo(before + 1);
     }
 
     @DisplayName("로그인 전에 /api/me가 401을 받았어도, 로그인 후에는 /account로 보낸다. (API 주소를 돌아갈 곳으로 기억하지 않는다)")
