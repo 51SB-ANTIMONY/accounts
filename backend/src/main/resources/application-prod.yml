@@ -12,8 +12,9 @@
 #   SIGNING_KEY_PATH 또는 SIGNING_KEY_BASE64   토큰 서명용 RSA 개인 키 (파일 경로 또는 한 줄 내용). 만드는 법:
 #     openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out signing-key.pem
 #     한 줄 내용: grep -v -- ----- signing-key.pem | tr -d '\n'
-#   SPRING_MAIL_HOST, SPRING_MAIL_PORT, SPRING_MAIL_USERNAME, SPRING_MAIL_PASSWORD   인증 메일을 보낼 SMTP 서버
-#     (예: Gmail은 smtp.gmail.com, 587, Gmail 주소, 앱 비밀번호)
+#   SMTP_HOST, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD   인증 메일을 보낼 SMTP 서버
+#     (예: Gmail은 smtp.gmail.com, 587, Gmail 주소, 앱 비밀번호). 비워 두면 메일 대신 서버 로그에 인증번호를 남긴다
+#   MAIL_FROM                            (선택) 보내는 사람 주소
 server:
   servlet:
     session:
@@ -30,6 +31,18 @@ spring:
     password: ${DB_PASSWORD}
   jpa:
     show-sql: false
+  mail:
+    # SMTP_HOST 등을 설정하면 실제 메일을 보낸다 (SmtpVerificationMailSender)
+    host: ${SMTP_HOST:}
+    port: ${SMTP_PORT:587}
+    username: ${SMTP_USERNAME:}
+    password: ${SMTP_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
   h2:
     console:
       enabled: false

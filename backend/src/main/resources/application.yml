@@ -46,6 +46,11 @@ management:
       exposure:
         # 외부에는 상태 확인(/actuator/health)만 공개한다
         include: health
+  health:
+    mail:
+      # 메일 서버(SMTP)에 문제가 있어도 로그인 서버 전체를 비정상으로 판단하지 않는다.
+      # (메일을 설정하지 않으면 SMTP 점검이 실패해 헬스 체크가 DOWN이 된다)
+      enabled: false
 
 server:
   port: ${PORT:9000}
@@ -72,6 +77,9 @@ accounts:
   remember-me:
     # 로그인 상태 유지 쿠키의 서명 키
     key: ${REMEMBER_ME_KEY}
+  mail:
+    # 인증 메일의 보내는 사람 주소 (예: ANTIMONY <no-reply@antimony.kr>). 비워 두면 SMTP 계정
+    from: ${MAIL_FROM:}
   signing-key:
     # 토큰 서명용 RSA 개인 키(PKCS#8). 파일 경로(path) 또는 내용(base64) 중 하나를 준다.
     # 둘 다 비워 두면(로컬) 켤 때마다 새 키를 만든다.

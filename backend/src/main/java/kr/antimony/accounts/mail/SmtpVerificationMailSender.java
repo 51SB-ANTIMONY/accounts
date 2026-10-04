@@ -1,23 +1,34 @@
 package kr.antimony.accounts.mail;
 
 import kr.antimony.accounts.domain.VerificationPurpose;
-import lombok.RequiredArgsConstructor;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
-// spring.mail.host가 설정되어 있을 때만 쓰인다. 실제 메일을 보낸다.
-@RequiredArgsConstructor
+// spring.mail.host 값이 있을 때만 쓰인다. 실제 메일을 보낸다.
+// (운영 설정은 SMTP_HOST가 없으면 빈 값이 되므로, "설정됨"이 아니라 "값이 비어 있지 않음"으로 판단한다)
 @Component
-@ConditionalOnProperty(name = "spring.mail.host")
+@ConditionalOnExpression("!'${spring.mail.host:}'.isEmpty()")
 public class SmtpVerificationMailSender implements VerificationMailSender {
 
     private final JavaMailSender mailSender;
+    // 보내는 사람 주소. 비워 두면 SMTP 로그인 계정으로 보낸다(Gmail). 다른 메일 서비스는 정해 둔 주소가 필요하다.
+    private final String from;
+
+    public SmtpVerificationMailSender(JavaMailSender mailSender, @Value("${accounts.mail.from:}") String from) {
+        this.mailSender = mailSender;
+        this.from = from;
+    }
 
     @Override
     public void send(String email, VerificationPurpose purpose, String code) {
         SimpleMailMessage message = new SimpleMailMessage();
+        if (StringUtils.hasText(from)) {
+            message.setFrom(from);
+        }
         message.setTo(email);
         message.setSubject("[ANTIMONY] " + subject(purpose));
         message.setText("인증번호: " + code + "\n\n3분 안에 입력해 주세요. 요청하지 않으셨다면 이 메일을 무시해 주세요.");
