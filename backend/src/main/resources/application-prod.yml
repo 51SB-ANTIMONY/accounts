@@ -13,8 +13,9 @@
 #     openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out signing-key.pem
 #     한 줄 내용: grep -v -- ----- signing-key.pem | tr -d '\n'
 #   SMTP_HOST, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD   인증 메일을 보낼 SMTP 서버
-#     (예: Gmail은 smtp.gmail.com, 587, Gmail 주소, 앱 비밀번호). 비워 두면 메일 대신 서버 로그에 인증번호를 남긴다
-#   MAIL_FROM                            (선택) 보내는 사람 주소
+#     운영은 Resend: smtp.resend.com, 587, 사용자 이름 resend, 비밀번호는 Resend API 키
+#     (Gmail이면 smtp.gmail.com, 587, Gmail 주소, 앱 비밀번호). 비워 두면 메일 대신 서버 로그에 인증번호를 남긴다
+#   MAIL_FROM                            (선택) 보내는 사람 주소. 운영: ANTIMONY <no-reply@antimony.kr>
 server:
   servlet:
     session:
