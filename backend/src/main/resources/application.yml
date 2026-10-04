@@ -49,6 +49,9 @@ server:
       cookie:
         # 같은 컴퓨터에서 실행하는 blog 서버의 세션 쿠키와 섞이지 않도록 이름을 정한다.
         name: ACCOUNTS_SESSION
+        http-only: true
+        # 다른 사이트에서 시작된 POST 요청에는 쿠키를 보내지 않는다. 로그인 리디렉트(주소창 이동)에는 보낸다.
+        same-site: lax
 
 accounts:
   # 인가 서버의 주소(사용자와 앱이 접속하는 주소). 토큰의 iss 클레임과 설정 문서에 들어간다.
@@ -63,5 +66,9 @@ accounts:
     # 로그인 상태 유지 쿠키의 서명 키
     key: ${REMEMBER_ME_KEY}
   signing-key:
-    # 토큰 서명용 RSA 개인 키(PEM, PKCS#8) 파일 경로. 비워 두면(로컬) 켤 때마다 새 키를 만든다.
+    # 토큰 서명용 RSA 개인 키(PKCS#8). 파일 경로(path) 또는 내용(base64) 중 하나를 준다.
+    # 둘 다 비워 두면(로컬) 켤 때마다 새 키를 만든다.
     path: ${SIGNING_KEY_PATH:}
+    # PEM 파일의 BEGIN/END 줄 사이 내용을 줄바꿈 없이 한 줄로 (서버 설정 화면에 파일을 올리기 어려울 때)
+    base64: ${SIGNING_KEY_BASE64:}
+    required: false

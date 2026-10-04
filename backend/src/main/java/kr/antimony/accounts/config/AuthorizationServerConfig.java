@@ -194,14 +194,22 @@ public class AuthorizationServerConfig {
     }
 
     // 토큰 서명용 RSA 키. 개인 키로 서명하고, 공개 키는 /oauth2/jwks로 공개된다.
-    // 운영은 PEM 파일(accounts.signing-key.path)에서 읽고, 파일을 지정하지 않은 로컬은 켤 때마다 새로 만든다.
+    // 운영은 저장해 둔 키를 읽는다: PEM 파일(accounts.signing-key.path) 또는 한 줄 내용(accounts.signing-key.base64).
+    // 둘 다 없으면, 운영(required=true)에서는 켜지지 않고 로컬에서는 켤 때마다 새로 만든다.
     // (SecurityContext는 Nimbus 라이브러리의 타입이다. Spring Security의 SecurityContext와 다르다.)
     @Bean
-    public JWKSource<SecurityContext> jwkSource(@Value("${accounts.signing-key.path:}") String signingKeyPath) {
+    public JWKSource<SecurityContext> jwkSource(@Value("${accounts.signing-key.path:}") String signingKeyPath,
+                                                @Value("${accounts.signing-key.base64:}") String signingKeyBase64,
+                                                @Value("${accounts.signing-key.required:false}") boolean required) {
         RSAKey rsaKey;
         if (StringUtils.hasText(signingKeyPath)) {
             rsaKey = SigningKeys.load(Path.of(signingKeyPath));
             log.info("서명 키를 파일에서 읽었습니다 (kid: {})", rsaKey.getKeyID());
+        } else if (StringUtils.hasText(signingKeyBase64)) {
+            rsaKey = SigningKeys.fromBase64(signingKeyBase64);
+            log.info("서명 키를 SIGNING_KEY_BASE64에서 읽었습니다 (kid: {})", rsaKey.getKeyID());
+        } else if (required) {
+            throw new IllegalStateException("운영에서는 서명 키가 필요합니다. SIGNING_KEY_PATH 또는 SIGNING_KEY_BASE64를 설정해 주세요.");
         } else {
             rsaKey = SigningKeys.generate();
             log.warn("서명 키 파일이 없어 임시 키를 만들었습니다. 재시작하면 바뀌어 이전 토큰을 검증할 수 없습니다. (로컬 전용)");

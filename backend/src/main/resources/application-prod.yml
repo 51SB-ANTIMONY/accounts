@@ -9,8 +9,19 @@
 #   BLOG_REDIRECT_URI                    예: https://blog.antimony.kr/login/oauth2/code/accounts
 #   BLOG_POST_LOGOUT_REDIRECT_URI        예: https://blog.antimony.kr/
 #   REMEMBER_ME_KEY                      로그인 상태 유지 쿠키 서명 키 (임의의 긴 문자열)
-#   SIGNING_KEY_PATH                     토큰 서명용 RSA 개인 키 파일 경로. 만드는 법:
+#   SIGNING_KEY_PATH 또는 SIGNING_KEY_BASE64   토큰 서명용 RSA 개인 키 (파일 경로 또는 한 줄 내용). 만드는 법:
 #     openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out signing-key.pem
+#     한 줄 내용: grep -v -- ----- signing-key.pem | tr -d '\n'
+#   SPRING_MAIL_HOST, SPRING_MAIL_PORT, SPRING_MAIL_USERNAME, SPRING_MAIL_PASSWORD   인증 메일을 보낼 SMTP 서버
+#     (예: Gmail은 smtp.gmail.com, 587, Gmail 주소, 앱 비밀번호)
+server:
+  servlet:
+    session:
+      cookie:
+        # 운영은 HTTPS로만 접속하므로 세션 쿠키를 HTTPS 연결에서만 보내게 한다.
+        # (CSRF, 로그인 상태 유지 쿠키는 요청이 HTTPS일 때 자동으로 Secure가 붙는다. 앞단이 X-Forwarded-Proto: https를 넘겨야 한다)
+        secure: true
+
 spring:
   datasource:
     # 운영에서는 기본값(H2)을 쓰지 않는다. 설정하지 않으면 서버가 켜지지 않는다.
@@ -25,5 +36,5 @@ spring:
 
 accounts:
   signing-key:
-    # 운영에서는 반드시 파일에서 읽는다. 설정하지 않으면 서버가 켜지지 않는다.
-    path: ${SIGNING_KEY_PATH}
+    # 운영에서는 반드시 저장해 둔 키를 쓴다. 둘 다 없으면 서버가 켜지지 않는다.
+    required: true

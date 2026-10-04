@@ -15,7 +15,9 @@ import java.security.KeyPairGenerator;
 import java.security.interfaces.RSAPrivateCrtKey;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
+import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.RSAPublicKeySpec;
+import java.util.Base64;
 
 // 토큰 서명용 RSA 키를 만든다.
 // - 운영: PEM 파일(PKCS#8)에서 읽는다. 키가 바뀌지 않아야 앱(blog)이 이전에 받은 토큰을 계속 검증할 수 있다.
@@ -38,6 +40,20 @@ final class SigningKeys {
             return toJwk(publicKey, privateKey);
         } catch (IOException | GeneralSecurityException e) {
             throw new IllegalStateException("서명 키 파일을 읽을 수 없습니다: " + pemFile, e);
+        }
+    }
+
+    // PEM 파일의 BEGIN/END 줄 사이 내용(Base64)으로 읽는다. 공백과 줄바꿈은 무시한다.
+    static RSAKey fromBase64(String base64) {
+        try {
+            byte[] der = Base64.getDecoder().decode(base64.replaceAll("\\s", ""));
+            KeyFactory keyFactory = KeyFactory.getInstance("RSA");
+            RSAPrivateCrtKey privateKey = (RSAPrivateCrtKey) keyFactory.generatePrivate(new PKCS8EncodedKeySpec(der));
+            RSAPublicKey publicKey = (RSAPublicKey) keyFactory
+                    .generatePublic(new RSAPublicKeySpec(privateKey.getModulus(), privateKey.getPublicExponent()));
+            return toJwk(publicKey, privateKey);
+        } catch (IllegalArgumentException | GeneralSecurityException | ClassCastException e) {
+            throw new IllegalStateException("SIGNING_KEY_BASE64를 RSA 개인 키(PKCS#8)로 읽을 수 없습니다", e);
         }
     }
 

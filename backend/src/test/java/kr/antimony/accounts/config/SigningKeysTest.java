@@ -35,6 +35,23 @@ class SigningKeysTest {
         assertThat(first.getKeyID()).isEqualTo(first.computeThumbprint().toString());
     }
 
+    @DisplayName("PEM 파일의 BEGIN/END 사이 내용(한 줄 Base64)으로 읽어도 파일로 읽은 것과 같은 키다.")
+    @Test
+    void loadFromBase64(@TempDir Path dir) throws Exception {
+        KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
+        generator.initialize(2048);
+        KeyPair keyPair = generator.generateKeyPair();
+        String body = Base64.getMimeEncoder(64, "\n".getBytes()).encodeToString(keyPair.getPrivate().getEncoded());
+        Path pem = dir.resolve("signing-key.pem");
+        Files.writeString(pem, "-----BEGIN PRIVATE KEY-----\n" + body + "\n-----END PRIVATE KEY-----\n");
+
+        RSAKey fromFile = SigningKeys.load(pem);
+        RSAKey fromBase64 = SigningKeys.fromBase64(body.replace("\n", ""));
+
+        assertThat(fromBase64.getKeyID()).isEqualTo(fromFile.getKeyID());
+        assertThat(fromBase64.toRSAPublicKey()).isEqualTo(keyPair.getPublic());
+    }
+
     @DisplayName("파일이 없는 로컬에서는 만들 때마다 다른 키다.")
     @Test
     void generateNewKey() {
