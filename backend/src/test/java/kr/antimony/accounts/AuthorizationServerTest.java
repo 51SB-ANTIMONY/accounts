@@ -4,6 +4,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
@@ -59,6 +60,9 @@ class AuthorizationServerTest {
 
     @Autowired
     ObjectMapper objectMapper;
+
+    @Autowired
+    JdbcTemplate jdbcTemplate;
 
     @DisplayName("설정 문서: issuer와 각 엔드포인트 주소를 공개한다.")
     @Test
@@ -172,6 +176,23 @@ class AuthorizationServerTest {
                 .andExpect(jsonPath("$.sub").value(String.valueOf(member.getId())))
                 .andExpect(jsonPath("$.nickname").value("테스터"))
                 .andExpect(jsonPath("$.email").value("tester@antimony.kr"));
+
+        // ⑤ 발급 정보는 DB에 저장되고, 리프레시 토큰으로 새 토큰을 받을 수 있다. (재시작해도 DB에서 읽는다)
+        assertThat(jdbcTemplate.queryForObject("select count(*) from oauth2_authorization", Integer.class)).isPositive();
+        mockMvc.perform(post("/oauth2/token")
+                        .with(httpBasic("blog", blogClientSecret))
+                        .param("grant_type", "refresh_token")
+                        .param("refresh_token", tokens.get("refresh_token").asText()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.access_token").isNotEmpty())
+                .andExpect(jsonPath("$.refresh_token").isNotEmpty());
+    }
+
+    @DisplayName("앱 등록: 서버를 켤 때 설정값으로 blog 앱을 DB(oauth2_registered_client)에 등록한다.")
+    @Test
+    void registeredClientInDatabase() {
+        assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from oauth2_registered_client where client_id = 'blog'", Integer.class)).isEqualTo(1);
     }
 
     private JsonNode decodePayload(String jwt) throws Exception {

@@ -21,7 +21,11 @@ import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
 import org.springframework.security.oauth2.core.oidc.OidcScopes;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
-import org.springframework.security.oauth2.server.authorization.client.InMemoryRegisteredClientRepository;
+import org.springframework.security.oauth2.server.authorization.JdbcOAuth2AuthorizationConsentService;
+import org.springframework.security.oauth2.server.authorization.JdbcOAuth2AuthorizationService;
+import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationConsentService;
+import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationService;
+import org.springframework.security.oauth2.server.authorization.client.JdbcRegisteredClientRepository;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
 import org.springframework.security.oauth2.server.authorization.settings.AuthorizationServerSettings;
@@ -33,6 +37,12 @@ import org.springframework.security.oauth2.core.oidc.endpoint.OidcParameterNames
 import kr.antimony.accounts.domain.User;
 import kr.antimony.accounts.repository.UserRepository;
 import kr.antimony.accounts.security.AccountPrincipal;
+import kr.antimony.accounts.security.AccountsJackson;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.ApplicationRunner;
+import org.springframework.jdbc.core.JdbcOperations;
+import org.springframework.util.StringUtils;
+import tools.jackson.databind.json.JsonMapper;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.logout.CompositeLogoutHandler;
 import org.springframework.security.web.authentication.logout.SecurityContextLogoutHandler;
@@ -41,11 +51,7 @@ import org.springframework.security.oauth2.server.authorization.oidc.web.authent
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
 import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher;
 
-import java.security.KeyPair;
-import java.security.KeyPairGenerator;
-import java.security.NoSuchAlgorithmException;
-import java.security.interfaces.RSAPrivateKey;
-import java.security.interfaces.RSAPublicKey;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.UUID;
 
@@ -53,6 +59,7 @@ import java.util.UUID;
 // 인가 서버 주소(/oauth2/**, /.well-known/**, /userinfo, /connect/**)만 담당하는 필터 체인과,
 // 등록된 앱, 토큰 서명 키, issuer 설정을 정의한다.
 @Configuration
+@Slf4j
 public class AuthorizationServerConfig {
 
     @Bean
@@ -86,23 +93,41 @@ public class AuthorizationServerConfig {
         return http.build();
     }
 
-    // 로그인을 요청할 수 있는 앱 목록. 지금은 blog 하나를 메모리에 등록한다.
+    // 로그인을 요청할 수 있는 앱 목록. DB(oauth2_registered_client)에 저장한다.
     @Bean
-    public RegisteredClientRepository registeredClientRepository(
+    public RegisteredClientRepository registeredClientRepository(JdbcOperations jdbcOperations) {
+        return new JdbcRegisteredClientRepository(jdbcOperations);
+    }
+
+    // 서버를 켤 때 설정값으로 blog 앱을 등록한다. 이미 있으면 같은 id로 덮어써서,
+    // 설정의 주소나 Client Secret을 바꾸면 다음 시작 때 반영된다.
+    @Bean
+    public ApplicationRunner registerClients(
+            RegisteredClientRepository registeredClientRepository,
             PasswordEncoder passwordEncoder,
             @Value("${accounts.clients.blog.client-secret}") String blogClientSecret,
             @Value("${accounts.clients.blog.redirect-uri}") String blogRedirectUri,
             @Value("${accounts.clients.blog.post-logout-redirect-uri}") String blogPostLogoutRedirectUri) {
-        RegisteredClient blog = RegisteredClient.withId("blog")
+        return args -> {
+            RegisteredClient existing = registeredClientRepository.findByClientId("blog");
+            String id = existing != null ? existing.getId() : UUID.randomUUID().toString();
+            registeredClientRepository.save(blogClient(id, passwordEncoder.encode(blogClientSecret),
+                    blogRedirectUri, blogPostLogoutRedirectUri));
+        };
+    }
+
+    private static RegisteredClient blogClient(String id, String encodedClientSecret,
+                                               String redirectUri, String postLogoutRedirectUri) {
+        return RegisteredClient.withId(id)
                 .clientId("blog")
                 // 토큰 요청 때 받은 Client Secret을 PasswordEncoder로 비교하므로 암호화해서 저장한다.
-                .clientSecret(passwordEncoder.encode(blogClientSecret))
+                .clientSecret(encodedClientSecret)
                 .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
                 .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
                 .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
-                .redirectUri(blogRedirectUri)
+                .redirectUri(redirectUri)
                 // 전체 로그아웃(/connect/logout) 후 돌아갈 주소
-                .postLogoutRedirectUri(blogPostLogoutRedirectUri)
+                .postLogoutRedirectUri(postLogoutRedirectUri)
                 .scope(OidcScopes.OPENID)
                 .scope(OidcScopes.PROFILE)
                 .scope(OidcScopes.EMAIL)
@@ -119,7 +144,27 @@ public class AuthorizationServerConfig {
                         .reuseRefreshTokens(false)
                         .build())
                 .build();
-        return new InMemoryRegisteredClientRepository(blog);
+    }
+
+    // 발급한 코드와 토큰, 로그인한 사용자를 DB(oauth2_authorization)에 저장한다. 서버를 재시작해도 리프레시 토큰을 쓸 수 있다.
+    // 로그인한 사용자(우리 principal)를 JSON으로 저장·복원하도록 AccountsJackson의 설정을 쓴다.
+    @Bean
+    public OAuth2AuthorizationService authorizationService(JdbcOperations jdbcOperations,
+                                                           RegisteredClientRepository registeredClientRepository) {
+        JdbcOAuth2AuthorizationService service = new JdbcOAuth2AuthorizationService(jdbcOperations, registeredClientRepository);
+        JsonMapper jsonMapper = AccountsJackson.jsonMapper();
+        service.setAuthorizationRowMapper(
+                new JdbcOAuth2AuthorizationService.JsonMapperOAuth2AuthorizationRowMapper(registeredClientRepository, jsonMapper));
+        service.setAuthorizationParametersMapper(
+                new JdbcOAuth2AuthorizationService.JsonMapperOAuth2AuthorizationParametersMapper(jsonMapper));
+        return service;
+    }
+
+    // 사용자가 앱에 허락한 범위 (oauth2_authorization_consent). 자사 앱은 동의 화면을 생략하므로 지금은 쓰이지 않는다.
+    @Bean
+    public OAuth2AuthorizationConsentService authorizationConsentService(JdbcOperations jdbcOperations,
+                                                                         RegisteredClientRepository registeredClientRepository) {
+        return new JdbcOAuth2AuthorizationConsentService(jdbcOperations, registeredClientRepository);
     }
 
     // 발급하는 토큰에 우리 회원 정보를 넣는다.
@@ -149,15 +194,18 @@ public class AuthorizationServerConfig {
     }
 
     // 토큰 서명용 RSA 키. 개인 키로 서명하고, 공개 키는 /oauth2/jwks로 공개된다.
-    // TODO: 지금은 서버를 시작할 때마다 새로 만든다. 재시작해도 기존 토큰이 유효하도록 키를 저장해서 쓰도록 바꾼다.
+    // 운영은 PEM 파일(accounts.signing-key.path)에서 읽고, 파일을 지정하지 않은 로컬은 켤 때마다 새로 만든다.
     // (SecurityContext는 Nimbus 라이브러리의 타입이다. Spring Security의 SecurityContext와 다르다.)
     @Bean
-    public JWKSource<SecurityContext> jwkSource() {
-        KeyPair keyPair = generateRsaKey();
-        RSAKey rsaKey = new RSAKey.Builder((RSAPublicKey) keyPair.getPublic())
-                .privateKey((RSAPrivateKey) keyPair.getPrivate())
-                .keyID(UUID.randomUUID().toString())
-                .build();
+    public JWKSource<SecurityContext> jwkSource(@Value("${accounts.signing-key.path:}") String signingKeyPath) {
+        RSAKey rsaKey;
+        if (StringUtils.hasText(signingKeyPath)) {
+            rsaKey = SigningKeys.load(Path.of(signingKeyPath));
+            log.info("서명 키를 파일에서 읽었습니다 (kid: {})", rsaKey.getKeyID());
+        } else {
+            rsaKey = SigningKeys.generate();
+            log.warn("서명 키 파일이 없어 임시 키를 만들었습니다. 재시작하면 바뀌어 이전 토큰을 검증할 수 없습니다. (로컬 전용)");
+        }
         return new ImmutableJWKSet<>(new JWKSet(rsaKey));
     }
 
@@ -175,15 +223,5 @@ public class AuthorizationServerConfig {
         return AuthorizationServerSettings.builder()
                 .issuer(issuer)
                 .build();
-    }
-
-    private static KeyPair generateRsaKey() {
-        try {
-            KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA");
-            keyPairGenerator.initialize(2048);
-            return keyPairGenerator.generateKeyPair();
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException(e);
-        }
     }
 }
