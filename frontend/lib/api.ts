@@ -70,6 +70,8 @@ export type Me = {
   email: string | null;
   nickname: string;
   hasPassword: boolean;
+  // 관리자 역할. 일반 회원은 null
+  adminRole: "ADMIN" | "CO_ADMIN" | null;
   identities: { provider: string; linkedAt: string }[];
 };
 

@@ -1,6 +1,8 @@
 // 프로토타입과 서버(SignupRequest)의 규칙을 맞춘 입력값 검사
 
 export const UID_PATTERN = /^[a-z0-9]{4,16}$/;
+// 관리자는 4자보다 짧은 아이디도 정할 수 있다 (아이디·비밀번호 설정)
+export const ADMIN_UID_PATTERN = /^[a-z0-9]{1,16}$/;
 export const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function emailError(value: string): string {

@@ -1,7 +1,10 @@
 package kr.antimony.accounts.controller;
 
+import kr.antimony.accounts.domain.Admin;
+import kr.antimony.accounts.domain.AdminRole;
 import kr.antimony.accounts.domain.User;
 import kr.antimony.accounts.domain.UserIdentity;
+import kr.antimony.accounts.repository.AdminRepository;
 import kr.antimony.accounts.repository.UserIdentityRepository;
 import kr.antimony.accounts.repository.UserRepository;
 import kr.antimony.accounts.support.DatabaseCleaner;
@@ -18,6 +21,8 @@ import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
+
+import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestBuilders.formLogin;
@@ -40,6 +45,7 @@ class AccountSettingsApiTest {
     @Autowired MockMvc mockMvc;
     @Autowired UserRepository userRepository;
     @Autowired UserIdentityRepository userIdentityRepository;
+    @Autowired AdminRepository adminRepository;
     @Autowired PasswordEncoder passwordEncoder;
     @Autowired DatabaseCleaner databaseCleaner;
 
@@ -166,5 +172,58 @@ class AccountSettingsApiTest {
 
         changePassword(socialOnlyUser(), "anything1!", "newpass12!")
                 .andExpect(status().isConflict());
+    }
+
+    @DisplayName("관리자가 아닌 회원: 4자보다 짧은 아이디는 중복확인 invalid, 설정은 400(errors.uid)")
+    @Test
+    void shortUidRejectedForMember() throws Exception {
+        User user = socialOnlyUser();
+
+        mockMvc.perform(get("/api/me/uid-availability").param("uid", "sb").with(authentication(TestUsers.loggedIn(user))))
+                .andExpect(jsonPath("$.status").value("invalid"));
+        setCredentials(user, "sb", "pass1234!")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.uid").value("영문 소문자·숫자 4–16자로 입력해 주세요."));
+        assertThat(userRepository.findById(user.getId()).orElseThrow().hasPassword()).isFalse();
+    }
+
+    @DisplayName("관리자: 1–16자 아이디를 정할 수 있고 그 아이디로 로그인된다. 다른 회원이 쓰는 짧은 아이디는 taken")
+    @Test
+    void shortUidAllowedForAdmin() throws Exception {
+        User user = socialOnlyUser();
+        adminRepository.save(new Admin(user.getId(), AdminRole.ADMIN, Instant.now()));
+        User other = TestUsers.localUser(userRepository, passwordEncoder, "ab", "o@antimony.kr", "다른회원", "pass1234!");
+
+        mockMvc.perform(get("/api/me/uid-availability").param("uid", other.getUid()).with(authentication(TestUsers.loggedIn(user))))
+                .andExpect(jsonPath("$.status").value("taken"));
+        mockMvc.perform(get("/api/me/uid-availability").param("uid", "s").with(authentication(TestUsers.loggedIn(user))))
+                .andExpect(jsonPath("$.status").value("ok"));
+
+        setCredentials(user, "s", "pass1234!").andExpect(status().isNoContent());
+        mockMvc.perform(formLogin("/login/password").user("s").password("pass1234!"))
+                .andExpect(redirectedUrl("/account"));
+    }
+
+    @DisplayName("공동 관리자도 짧은 아이디를 정할 수 있다")
+    @Test
+    void shortUidAllowedForCoAdmin() throws Exception {
+        User user = socialOnlyUser();
+        adminRepository.save(new Admin(user.getId(), AdminRole.CO_ADMIN, Instant.now()));
+
+        setCredentials(user, "co", "pass1234!").andExpect(status().isNoContent());
+        assertThat(userRepository.findById(user.getId()).orElseThrow().getUid()).isEqualTo("co");
+    }
+
+    @DisplayName("내 계정: 관리자는 adminRole이 ADMIN, 일반 회원은 null")
+    @Test
+    void adminRoleInMe() throws Exception {
+        User admin = socialOnlyUser();
+        adminRepository.save(new Admin(admin.getId(), AdminRole.ADMIN, Instant.now()));
+        User member = TestUsers.localUser(userRepository, passwordEncoder, "member01", "m@antimony.kr", "일반회원", "pass1234!");
+
+        mockMvc.perform(get("/api/me").with(authentication(TestUsers.loggedIn(admin))))
+                .andExpect(jsonPath("$.adminRole").value("ADMIN"));
+        mockMvc.perform(get("/api/me").with(authentication(TestUsers.loggedIn(member))))
+                .andExpect(jsonPath("$.adminRole").doesNotExist());
     }
 }

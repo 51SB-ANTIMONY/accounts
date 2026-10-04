@@ -10,6 +10,8 @@ public record MeResponse(
         String email,
         String nickname,
         boolean hasPassword,
+        // 관리자 역할(ADMIN, CO_ADMIN). 일반 회원은 null
+        String adminRole,
         List<LinkedIdentity> identities
 ) {
     public record LinkedIdentity(String provider, LocalDateTime linkedAt) {

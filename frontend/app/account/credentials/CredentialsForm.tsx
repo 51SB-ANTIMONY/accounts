@@ -7,13 +7,13 @@ import Banner from "@/components/Banner";
 import NewPasswordFields from "@/components/NewPasswordFields";
 import { CheckIcon } from "@/components/icons";
 import { api, ApiError } from "@/lib/api";
-import { passwordConfirmError, passwordError, UID_PATTERN } from "@/lib/validation";
+import { ADMIN_UID_PATTERN, passwordConfirmError, passwordError, UID_PATTERN } from "@/lib/validation";
 
 type IdStatus = "empty" | "invalid" | "taken" | "ok";
 
 const ID_MESSAGES: Record<IdStatus, string> = {
   empty: "아이디를 입력해 주세요.",
-  invalid: "영문 소문자·숫자 4–16자로 입력해 주세요.",
+  invalid: "", // 회원 종류에 따라 다르다 (idRule)
   taken: "이미 사용 중인 아이디예요.",
   ok: "사용 가능한 아이디예요.",
 };
@@ -22,6 +22,7 @@ const ID_MESSAGES: Record<IdStatus, string> = {
 export default function CredentialsForm() {
   const router = useRouter();
   const [currentUid, setCurrentUid] = useState<string | null>(null);
+  const [admin, setAdmin] = useState(false);
   const [uid, setUid] = useState("");
   // 중복확인 결과는 확인한 그 아이디에만 유효하다.
   const [idCheck, setIdCheck] = useState<{ uid: string; status: IdStatus } | null>(null);
@@ -37,7 +38,10 @@ export default function CredentialsForm() {
     api.me().then(
       (me) => {
         if (me.hasPassword) router.replace("/account/password");
-        else setCurrentUid(me.uid);
+        else {
+          setCurrentUid(me.uid);
+          setAdmin(me.adminRole !== null);
+        }
       },
       (e) => {
         if (e instanceof ApiError && e.status === 401) router.replace("/login");
@@ -47,14 +51,15 @@ export default function CredentialsForm() {
   }, [router]);
 
   const trimmedUid = uid.trim();
-  const idFormatOk = UID_PATTERN.test(trimmedUid);
+  const idFormatOk = (admin ? ADMIN_UID_PATTERN : UID_PATTERN).test(trimmedUid);
+  const idRule = admin ? "영문 소문자·숫자 1–16자 (관리자)" : "영문 소문자·숫자 4–16자";
   const idStatus = idCheck && idCheck.uid === uid ? idCheck.status : null;
   const uidErrText =
     serverErrors.uid ||
     (!trimmedUid
       ? ID_MESSAGES.empty
       : !idFormatOk
-        ? ID_MESSAGES.invalid
+        ? `${idRule}로 입력해 주세요.`
         : idStatus === "taken"
           ? ID_MESSAGES.taken
           : idStatus !== "ok"
@@ -66,10 +71,12 @@ export default function CredentialsForm() {
     : idStatus === "ok"
       ? ID_MESSAGES.ok
       : idStatus
-        ? ID_MESSAGES[idStatus]
+        ? idStatus === "invalid"
+          ? `${idRule}로 입력해 주세요.`
+          : ID_MESSAGES[idStatus]
         : tried && uidErrText
           ? uidErrText
-          : "영문 소문자·숫자 4–16자";
+          : idRule;
   const valid = !uidErrText && !(serverErrors.password || passwordError(pw)) && !passwordConfirmError(pw, pw2);
 
   const checkId = async () => {

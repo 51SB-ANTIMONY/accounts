@@ -8,6 +8,7 @@ import kr.antimony.accounts.exception.BadRequestException;
 import kr.antimony.accounts.exception.ConflictException;
 import kr.antimony.accounts.exception.DuplicateUserException;
 import kr.antimony.accounts.exception.SocialLoginException;
+import kr.antimony.accounts.repository.AdminRepository;
 import kr.antimony.accounts.repository.UserIdentityRepository;
 import kr.antimony.accounts.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -28,6 +29,7 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final UserIdentityRepository userIdentityRepository;
+    private final AdminRepository adminRepository;
 
     // 이메일 인증을 마친 가입 신청으로 회원을 만든다.
     // 신청 뒤 인증 전에 다른 사람이 같은 값으로 먼저 가입했을 수 있으므로 한 번 더 확인한다.
@@ -108,7 +110,8 @@ public class UserService {
         List<MeResponse.LinkedIdentity> identities = userIdentityRepository.findByUserId(userId).stream()
                 .map(identity -> new MeResponse.LinkedIdentity(identity.getProvider(), identity.getCreatedAt()))
                 .toList();
-        return new MeResponse(user.getId(), user.getUid(), user.getEmail(), user.getNickname(), user.hasPassword(), identities);
+        String adminRole = adminRepository.findById(userId).map(admin -> admin.getRole().name()).orElse(null);
+        return new MeResponse(user.getId(), user.getUid(), user.getEmail(), user.getNickname(), user.hasPassword(), adminRole, identities);
     }
 
     // 소셜 계정 연결 해제. 로그인할 방법이 하나도 남지 않게 되면 거부한다.

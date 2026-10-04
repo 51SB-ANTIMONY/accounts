@@ -41,8 +41,8 @@ public class MeApiController {
 
     // 아이디·비밀번호 설정 화면의 아이디 중복확인
     @GetMapping("/api/me/uid-availability")
-    public UidAvailabilityResponse checkUid(@RequestParam String uid) {
-        return accountSettingsService.checkUid(uid);
+    public UidAvailabilityResponse checkUid(@AuthenticationPrincipal AccountPrincipal principal, @RequestParam String uid) {
+        return accountSettingsService.checkUid(principal.getUserId(), uid);
     }
 
     // 아이디·비밀번호 설정 (소셜로만 가입한 회원)
