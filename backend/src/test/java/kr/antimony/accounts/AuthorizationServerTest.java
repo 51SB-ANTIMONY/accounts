@@ -188,6 +188,14 @@ class AuthorizationServerTest {
                 .andExpect(jsonPath("$.refresh_token").isNotEmpty());
     }
 
+    @DisplayName("상태 확인: /actuator/health는 로그인 없이 200과 UP을 응답한다. (로드밸런서의 헬스 체크)")
+    @Test
+    void health() throws Exception {
+        mockMvc.perform(get("/actuator/health"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("UP"));
+    }
+
     @DisplayName("앱 등록: 서버를 켤 때 설정값으로 blog 앱을 DB(oauth2_registered_client)에 등록한다.")
     @Test
     void registeredClientInDatabase() {

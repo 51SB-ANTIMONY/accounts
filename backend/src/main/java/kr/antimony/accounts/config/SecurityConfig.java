@@ -65,7 +65,9 @@ public class SecurityConfig {
         return http
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/csrf", "/api/auth/providers",
-                                "/api/signup/**", "/api/find-id/**", "/api/password-reset/**", "/error").permitAll()
+                                "/api/signup/**", "/api/find-id/**", "/api/password-reset/**", "/error",
+                                // 로드밸런서의 헬스 체크
+                                "/actuator/health").permitAll()
                         .anyRequest().authenticated())
                 // CSRF 토큰을 XSRF-TOKEN 쿠키로 내려 주고, X-XSRF-TOKEN 헤더 또는 _csrf 폼 값으로 받는다. (Next.js 화면용)
                 .csrf(csrf -> csrf.spa())

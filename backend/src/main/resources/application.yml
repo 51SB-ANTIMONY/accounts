@@ -40,6 +40,13 @@ spring:
               - email
               - profile
 
+management:
+  endpoints:
+    web:
+      exposure:
+        # 외부에는 상태 확인(/actuator/health)만 공개한다
+        include: health
+
 server:
   port: ${PORT:9000}
   # Next.js(accounts 화면)가 요청을 넘겨줄 때 붙이는 X-Forwarded-Host/Proto를 보고, 사용자가 접속한 주소 기준으로 리다이렉트 주소를 만든다.
