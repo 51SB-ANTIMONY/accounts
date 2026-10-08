@@ -1,8 +1,8 @@
 # Accounts
 
-`accounts.antimony.kr`에서 동작할 antimony.kr 통합 로그인(SSO) 서버입니다. 아이디·비밀번호 로그인과 소셜 로그인(Google)을 제공하고, antimony.kr의 여러 앱에 OpenID Connect로 로그인을 제공하는 것이 목표입니다.
+`accounts.antimony.kr`에서 동작하는 antimony.kr 통합 로그인(SSO) 서버입니다. 아이디·비밀번호 로그인과 소셜 로그인(Google)을 제공하고, antimony.kr의 여러 앱에 OpenID Connect로 로그인을 제공하는 것이 목표입니다.
 
-> 현재 개발 중입니다. 설계와 개발 과정은 blog 저장소의 노트에 정리했습니다: [설계 (15_sso)](https://github.com/51SB-ANTIMONY/blog/tree/main/note/15_sso), [단계별 계획과 구현 (16_accounts_separation)](https://github.com/51SB-ANTIMONY/blog/tree/main/note/16_accounts_separation).
+> 계속 개발 중입니다. 운영 배포 구성은 [배포](#배포), 개발 경위는 [개발 이력](#개발-이력)에 정리했습니다. 설계와 개발 과정은 blog 저장소의 노트에 정리했습니다: [설계 (15_sso)](https://github.com/51SB-ANTIMONY/blog/tree/main/note/15_sso), [단계별 계획과 구현 (16_accounts_separation)](https://github.com/51SB-ANTIMONY/blog/tree/main/note/16_accounts_separation).
 > 처음에는 blog 저장소의 `accounts/` 폴더에서 만들었고, 이 저장소로 분리했습니다. 커밋 이력도 함께 옮겼습니다.
 
 ## 구성
@@ -22,7 +22,7 @@
 | `/logout` | accounts 로그아웃 |
 
 ## 현재 상태 (1-7단계)
-Spring Authorization Server로 **OpenID Connect 인가 서버**가 되었습니다. 등록된 앱(지금은 `blog`)에 권한 부여 코드 방식으로 ID 토큰, 액세스 토큰, 리프레시 토큰을 발급합니다. issuer는 화면 주소인 `http://localhost:3001`입니다.
+Spring Authorization Server로 **OpenID Connect 인가 서버**가 되었습니다. 등록된 앱(지금은 `blog`)에 권한 부여 코드 방식으로 ID 토큰, 액세스 토큰, 리프레시 토큰을 발급합니다. issuer는 화면 주소입니다(로컬 `http://localhost:3001`, 운영 `https://accounts.antimony.kr`).
 
 ### 필터 체인
 | 순서 | 체인 | 담당 주소 | 인증 |
@@ -97,11 +97,26 @@ PC와 모바일(가로 1023px 이하), 라이트·다크 모드를 지원합니�
 
 ID 토큰의 `sub`는 로그인 방식과 상관없이 **회원 id**입니다. `profile` 범위면 `nickname`, `preferred_username`(아이디), `email` 범위면 `email` 클레임을 담습니다.
 
+### 로컬과 운영의 차이
+| 항목 | 로컬 | 운영 |
+|---|---|---|
+| DB | H2 메모리 DB (MySQL 호환 모드). 재시작하면 회원과 토큰이 사라짐 | Amazon RDS for MySQL. 테이블은 Flyway 스크립트(`db/migration`)로 관리 |
+| 토큰 서명 키 | 키 파일이 없으면 서버를 켤 때 새로 만듦. 재시작하면 바뀜 | 환경 변수로 받은 고정 RSA 키. 재시작해도 기존 토큰을 검증할 수 있음 |
+| 세션 | DB(Spring Session JDBC) | DB(Spring Session JDBC) |
+| 인증 메일 | 서버 로그에 인증번호 출력 | SMTP(Resend)로 발송 |
+
 ### 아직 남은 것
-- 토큰 서명 키를 서버를 시작할 때마다 새로 만들어서, 재시작하면 기존 토큰을 검증할 수 없습니다.
-- 등록된 앱, 발급한 토큰, 회원은 메모리 DB(H2)에 저장합니다. 재시작하면 사라집니다.
 - 카카오·네이버 로그인은 아직 등록하지 않아 "준비 중"으로 보입니다.
 - 약관 "보기" 링크와 왼쪽 소개 문구는 프로토타입의 자리 표시 그대로입니다.
+
+## 배포
+| 주소 | 내용 |
+|---|---|
+| https://accounts.antimony.kr | 로그인 화면 (Next.js, Vercel) |
+| https://accounts-api.antimony.kr | Spring 서버 (AWS Elastic Beanstalk 단일 인스턴스, Cloudflare 프록시로 HTTPS) |
+
+- DB는 Amazon RDS for MySQL을 씁니다. 필요한 환경 변수는 `backend/src/main/resources/application-prod.yml` 맨 위에 적어 두었습니다.
+- `main` 브랜치에 push하면 GitHub Actions(`.github/workflows/cicd.yml`)가 테스트를 돌리고, 통과하면 Elastic Beanstalk에 배포합니다.
 
 ## 로컬 실행
 
@@ -140,3 +155,9 @@ cd frontend
 npm run lint
 npm run build
 ```
+
+## 개발 이력
+| 시기 | 내용 |
+|---|---|
+| 2026.09 | blog를 처음부터 다시 만들면서, 여러 앱이 하나의 로그인을 함께 쓰도록 blog 저장소의 `accounts/` 폴더에서 통합 로그인 서버를 만들기 시작했다. |
+| 2026.10 | 이 저장소로 분리했다. 커밋 이력을 함께 옮기면서 이력을 다시 정리해, 많은 커밋의 날짜가 2026.10.03로 표시된다. |
