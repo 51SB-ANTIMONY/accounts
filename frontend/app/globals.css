@@ -41,7 +41,17 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  font-family: "Gowun Batang", "Noto Serif KR", serif;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  font-weight: 600;
 }
 
 a {
@@ -93,29 +103,6 @@ input[type="checkbox"]:focus-visible {
 
 .shell-aside > :not(.shell-aside-mark) {
   position: relative;
-}
-
-.shell-aside-intro {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  max-width: 400px;
-}
-
-.shell-aside-title {
-  margin: 0;
-  font-size: 34px;
-  font-weight: 700;
-  line-height: 1.35;
-  letter-spacing: -0.02em;
-  color: var(--text);
-}
-
-.shell-aside-desc {
-  margin: 0;
-  font-size: 16px;
-  line-height: 1.7;
-  color: var(--sub);
 }
 
 .shell-aside-copy {
@@ -258,7 +245,7 @@ input[type="checkbox"]:focus-visible {
 .title {
   margin: 0;
   font-size: 32px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: -0.02em;
   line-height: 1.25;
   color: var(--text);

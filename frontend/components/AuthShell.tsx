@@ -17,10 +17,6 @@ export default function AuthShell({ children }: { children: React.ReactNode }) {
       <aside className="shell-aside">
         <Image className="shell-aside-mark" src="/logo-mark.png" alt="" width={1055} height={926} />
         <Logo />
-        <div className="shell-aside-intro">
-          <p className="shell-aside-title">[ANTIMONY를 소개하는 한 줄]</p>
-          <p className="shell-aside-desc">[서비스 설명 1–2문장]</p>
-        </div>
         <p className="shell-aside-copy">© 2026 ANTIMONY</p>
       </aside>
       <div className="shell-body">
