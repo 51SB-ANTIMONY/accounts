@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import Banner from "@/components/Banner";
 import NewPasswordFields from "@/components/NewPasswordFields";
+import TermsDialog, { TERMS, type TermId } from "@/components/TermsDialog";
 import { CheckIcon } from "@/components/icons";
 import { api, ApiError } from "@/lib/api";
 import { savePendingSignup } from "@/lib/signupSession";
@@ -31,6 +32,7 @@ export default function SignupForm() {
   const [tos, setTos] = useState(false);
   const [privacy, setPrivacy] = useState(false);
   const [marketing, setMarketing] = useState(false);
+  const [openTerm, setOpenTerm] = useState<TermId | null>(null);
   const [tried, setTried] = useState(false);
   const [serverErrors, setServerErrors] = useState<Record<string, string>>({});
   const [errorText, setErrorText] = useState("");
@@ -236,7 +238,9 @@ export default function SignupForm() {
                   <span className="terms-tag">[필수]</span> 이용약관 동의
                 </span>
               </label>
-              <a href="#">보기</a>
+              <button type="button" className="terms-view" onClick={() => setOpenTerm("tos")} aria-label={`${TERMS.tos.title} 보기`}>
+                보기
+              </button>
             </div>
             <div className="terms-row">
               <label className="checkbox-row">
@@ -245,7 +249,9 @@ export default function SignupForm() {
                   <span className="terms-tag">[필수]</span> 개인정보 수집·이용 동의
                 </span>
               </label>
-              <a href="#">보기</a>
+              <button type="button" className="terms-view" onClick={() => setOpenTerm("privacy")} aria-label={`${TERMS.privacy.title} 보기`}>
+                보기
+              </button>
             </div>
             <div className="terms-row">
               <label className="checkbox-row">
@@ -254,7 +260,9 @@ export default function SignupForm() {
                   <span className="terms-tag">[선택]</span> 이벤트·소식 수신 동의
                 </span>
               </label>
-              <a href="#">보기</a>
+              <button type="button" className="terms-view" onClick={() => setOpenTerm("marketing")} aria-label={`${TERMS.marketing.title} 보기`}>
+                보기
+              </button>
             </div>
           </div>
           {tried && !termsOk && (
@@ -270,6 +278,18 @@ export default function SignupForm() {
       <p className="footer-text">
         이미 계정이 있으신가요? <Link href="/login">로그인</Link>
       </p>
+      {openTerm && (
+        <TermsDialog
+          term={openTerm}
+          onClose={() => setOpenTerm(null)}
+          onAgree={() => {
+            if (openTerm === "tos") setTos(true);
+            else if (openTerm === "privacy") setPrivacy(true);
+            else setMarketing(true);
+            setOpenTerm(null);
+          }}
+        />
+      )}
     </>
   );
 }

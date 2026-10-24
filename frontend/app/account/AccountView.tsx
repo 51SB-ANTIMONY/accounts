@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -164,9 +165,12 @@ export default function AccountView() {
                 const linked = me.identities.some((identity) => identity.provider === provider.id);
                 return (
                   <li key={provider.id}>
-                    <div className="method-name">
-                      <span>{provider.name}</span>
-                      <span className={linked ? "method-status is-on" : "method-status"}>{linked ? "연결됨" : available ? "연결 안 됨" : "준비 중"}</span>
+                    <div className="method-provider">
+                      <Image src={`/social/${provider.id}.png`} alt="" width={32} height={32} />
+                      <div className="method-name">
+                        <span>{provider.name}</span>
+                        <span className={linked ? "method-status is-on" : "method-status"}>{linked ? "연결됨" : available ? "연결 안 됨" : "준비 중"}</span>
+                      </div>
                     </div>
                     {linked ? (
                       <button type="button" className="row-btn" onClick={() => unlink(provider.id, provider.name)} disabled={busy}>

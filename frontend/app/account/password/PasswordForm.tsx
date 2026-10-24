@@ -98,6 +98,7 @@ export default function PasswordForm() {
           <NewPasswordFields
             idPrefix="pc"
             labels={["새 비밀번호", "새 비밀번호 확인"]}
+            placeholders={["새 비밀번호 입력", "새 비밀번호 다시 입력"]}
             password={pw}
             confirm={pw2}
             onPassword={(value) => {

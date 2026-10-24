@@ -8,6 +8,7 @@ import { CheckIcon, CircleIcon } from "./icons";
 type Props = {
   idPrefix: string;
   labels: [string, string];
+  placeholders?: [string, string];
   password: string;
   confirm: string;
   onPassword: (value: string) => void;
@@ -19,7 +20,7 @@ type Props = {
 };
 
 // 새 비밀번호 + 강도 막대 + 조건 + 비밀번호 확인 (회원가입, 비밀번호 재설정)
-export default function NewPasswordFields({ idPrefix, labels, password, confirm, onPassword, onConfirm, tried, emptyMessage, serverError }: Props) {
+export default function NewPasswordFields({ idPrefix, labels, placeholders = ["비밀번호 입력", "비밀번호 다시 입력"], password, confirm, onPassword, onConfirm, tried, emptyMessage, serverError }: Props) {
   const [shown, setShown] = useState(false);
   const checks = passwordChecks(password);
   const met = checks.filter((check) => check.ok).length;
@@ -43,7 +44,7 @@ export default function NewPasswordFields({ idPrefix, labels, password, confirm,
           onToggle={() => setShown(!shown)}
           invalid={pwErr}
           autoComplete="new-password"
-          placeholder="비밀번호 입력"
+          placeholder={placeholders[0]}
         />
         {pwErr && (
           <p role="alert" className="field-error">
@@ -81,7 +82,7 @@ export default function NewPasswordFields({ idPrefix, labels, password, confirm,
           onToggle={() => setShown(!shown)}
           invalid={pw2Err}
           autoComplete="new-password"
-          placeholder="비밀번호 다시 입력"
+          placeholder={placeholders[1]}
           toggleTabbable={false}
         />
         {pw2Err && (

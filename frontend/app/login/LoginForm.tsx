@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -8,9 +9,9 @@ import PasswordInput from "@/components/PasswordInput";
 import { api, navigateToServer, type Providers, submitForm } from "@/lib/api";
 
 const SOCIAL = [
-  { id: "google", name: "Google", label: "Google로 로그인" },
-  { id: "kakao", name: "카카오", label: "카카오로 로그인" },
-  { id: "naver", name: "네이버", label: "네이버로 로그인" },
+  { id: "google", label: "Google로 로그인" },
+  { id: "kakao", label: "카카오로 로그인" },
+  { id: "naver", label: "네이버로 로그인" },
 ] as const;
 
 const SOCIAL_ERRORS: Record<string, string> = {
@@ -176,10 +177,17 @@ export default function LoginForm() {
           </div>
           <div className="stack-12">
             <p className="social-title">간편 로그인</p>
-            <div className="social-grid">
+            <div className="social-row">
               {SOCIAL.map((provider) => (
-                <button key={provider.id} type="button" className="btn-ghost" aria-label={provider.label} onClick={() => socialLogin(provider.id)}>
-                  {provider.name}
+                <button
+                  key={provider.id}
+                  type="button"
+                  className="social-btn"
+                  aria-label={provider.label}
+                  title={provider.label}
+                  onClick={() => socialLogin(provider.id)}
+                >
+                  <Image src={`/social/${provider.id}.png`} alt="" width={52} height={52} />
                 </button>
               ))}
             </div>
