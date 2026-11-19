@@ -32,6 +32,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -51,6 +52,9 @@ class AuthorizationServerTest {
 
     @Value("${accounts.clients.blog.redirect-uri}")
     String blogRedirectUri;
+
+    @Value("${accounts.clients.hub.redirect-uri}")
+    String hubRedirectUri;
 
     @Autowired
     UserRepository userRepository;
@@ -188,6 +192,91 @@ class AuthorizationServerTest {
                 .andExpect(jsonPath("$.refresh_token").isNotEmpty());
     }
 
+    @DisplayName("hub(공개 앱): Client Secret 없이 PKCE만으로 코드를 토큰으로 바꾼다. ID 토큰에 닉네임이 있고, 리프레시 토큰은 없다.")
+    @Test
+    void hubPublicClientFlow() throws Exception {
+        userIdentityRepository.deleteAll();
+        userRepository.deleteAll();
+        User member = userRepository.save(User.builder()
+                .uid("tester02")
+                .email("hub@antimony.kr")
+                .nickname("허브")
+                .password("{noop}unused")
+                .build());
+        AccountUserDetails details = new AccountUserDetails(member);
+        String codeVerifier = newCodeVerifier();
+
+        MvcResult authorizeResult = mockMvc.perform(get(authorizeUri("hub", hubRedirectUri, "openid profile", "hub-state", codeChallenge(codeVerifier)))
+                        .with(authentication(UsernamePasswordAuthenticationToken.authenticated(details, null, details.getAuthorities()))))
+                .andExpect(status().is3xxRedirection())
+                .andReturn();
+        String location = authorizeResult.getResponse().getRedirectedUrl();
+        assertThat(location).startsWith(hubRedirectUri);
+        String code = UriComponentsBuilder.fromUriString(location).build().getQueryParams().getFirst("code");
+        assertThat(code).isNotBlank();
+
+        // 브라우저(hub 주소)에서 보내는 토큰 요청. 응답에 CORS 허용 헤더가 붙어야 hub가 읽을 수 있다.
+        MvcResult tokenResult = mockMvc.perform(post("/oauth2/token")
+                        .header("Origin", origin(hubRedirectUri))
+                        .param("grant_type", "authorization_code")
+                        .param("client_id", "hub")
+                        .param("code", code)
+                        .param("redirect_uri", hubRedirectUri)
+                        .param("code_verifier", codeVerifier))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin", origin(hubRedirectUri)))
+                .andExpect(jsonPath("$.id_token").isNotEmpty())
+                .andExpect(jsonPath("$.refresh_token").doesNotExist())
+                .andReturn();
+
+        JsonNode idToken = decodePayload(objectMapper.readTree(tokenResult.getResponse().getContentAsString()).get("id_token").asText());
+        JsonNode aud = idToken.get("aud");
+        assertThat(aud.isArray() ? aud.get(0).asText() : aud.asText()).isEqualTo("hub");
+        assertThat(idToken.get("nickname").asText()).isEqualTo("허브");
+        assertThat(idToken.get("email")).isNull();   // hub는 email 범위를 받지 않는다
+
+        // 전체 로그아웃: hub가 ID 토큰을 넘기면 accounts 로그아웃 후 hub로 돌아간다.
+        String rawIdToken = objectMapper.readTree(tokenResult.getResponse().getContentAsString()).get("id_token").asText();
+        mockMvc.perform(get(UriComponentsBuilder.fromPath("/connect/logout")
+                        .queryParam("id_token_hint", rawIdToken)
+                        .queryParam("client_id", "hub")
+                        .queryParam("post_logout_redirect_uri", hubRedirectUri)
+                        .encode().build().toUri()))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl(hubRedirectUri));
+
+    }
+
+    @DisplayName("hub(공개 앱): code_verifier가 없으면 토큰을 주지 않는다.")
+    @Test
+    void hubToken_withoutCodeVerifier() throws Exception {
+        mockMvc.perform(post("/oauth2/token")
+                        .accept(MediaType.APPLICATION_JSON)
+                        .param("grant_type", "authorization_code")
+                        .param("client_id", "hub")
+                        .param("code", "any-code")
+                        .param("redirect_uri", hubRedirectUri))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.access_token").doesNotExist());
+    }
+
+    @DisplayName("CORS: hub가 아닌 주소에서 온 토큰 요청은 거부한다.")
+    @Test
+    void tokenCors_otherOrigin() throws Exception {
+        mockMvc.perform(post("/oauth2/token")
+                        .header("Origin", "https://evil.example.com")
+                        .param("grant_type", "authorization_code")
+                        .param("client_id", "hub")
+                        .param("code", "any-code"))
+                .andExpect(status().isForbidden())
+                .andExpect(header().doesNotExist("Access-Control-Allow-Origin"));
+    }
+
+    private static String origin(String uri) {
+        URI u = URI.create(uri);
+        return u.getScheme() + "://" + u.getHost() + (u.getPort() == -1 ? "" : ":" + u.getPort());
+    }
+
     @DisplayName("상태 확인: /actuator/health는 로그인 없이 200과 UP을 응답한다. (로드밸런서의 헬스 체크)")
     @Test
     void health() throws Exception {
@@ -196,11 +285,13 @@ class AuthorizationServerTest {
                 .andExpect(jsonPath("$.status").value("UP"));
     }
 
-    @DisplayName("앱 등록: 서버를 켤 때 설정값으로 blog 앱을 DB(oauth2_registered_client)에 등록한다.")
+    @DisplayName("앱 등록: 서버를 켤 때 설정값으로 blog, hub 앱을 DB(oauth2_registered_client)에 등록한다.")
     @Test
     void registeredClientInDatabase() {
         assertThat(jdbcTemplate.queryForObject(
                 "select count(*) from oauth2_registered_client where client_id = 'blog'", Integer.class)).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from oauth2_registered_client where client_id = 'hub'", Integer.class)).isEqualTo(1);
     }
 
     private JsonNode decodePayload(String jwt) throws Exception {
@@ -221,9 +312,13 @@ class AuthorizationServerTest {
 
     // 인가 서버는 GET /oauth2/authorize의 파라미터를 쿼리 문자열에서 읽으므로 주소에 직접 넣는다.
     private static URI authorizeUri(String redirectUri, String scope, String state, String codeChallenge) {
+        return authorizeUri("blog", redirectUri, scope, state, codeChallenge);
+    }
+
+    private static URI authorizeUri(String clientId, String redirectUri, String scope, String state, String codeChallenge) {
         UriComponentsBuilder builder = UriComponentsBuilder.fromPath("/oauth2/authorize")
                 .queryParam("response_type", "code")
-                .queryParam("client_id", "blog")
+                .queryParam("client_id", clientId)
                 .queryParam("scope", scope)
                 .queryParam("redirect_uri", redirectUri)
                 .queryParam("state", state);

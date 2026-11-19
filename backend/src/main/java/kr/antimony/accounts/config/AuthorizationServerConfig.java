@@ -48,11 +48,15 @@ import org.springframework.security.web.authentication.logout.CompositeLogoutHan
 import org.springframework.security.web.authentication.logout.SecurityContextLogoutHandler;
 import org.springframework.security.web.authentication.rememberme.TokenBasedRememberMeServices;
 import org.springframework.security.oauth2.server.authorization.oidc.web.authentication.OidcLogoutAuthenticationSuccessHandler;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
 import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher;
 
+import java.net.URI;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.List;
 import java.util.UUID;
 
 // OAuth 2.1 / OpenID Connect 인가 서버 설정
@@ -65,7 +69,8 @@ public class AuthorizationServerConfig {
     @Bean
     @Order(1)
     public SecurityFilterChain authorizationServerSecurityFilterChain(HttpSecurity http,
-                                                                      TokenBasedRememberMeServices rememberMeServices) throws Exception {
+                                                                      TokenBasedRememberMeServices rememberMeServices,
+                                                                      @Value("${accounts.clients.hub.redirect-uri}") String hubRedirectUri) throws Exception {
         // 전체 로그아웃(/connect/logout)에서 세션과 함께 "로그인 상태 유지" 쿠키도 지운다.
         // 쿠키가 남아 있으면 다음 로그인 요청 때 자동으로 다시 로그인되기 때문이다.
         OidcLogoutAuthenticationSuccessHandler logoutHandler = new OidcLogoutAuthenticationSuccessHandler();
@@ -81,6 +86,8 @@ public class AuthorizationServerConfig {
                 })
                 .authorizeHttpRequests(auth -> auth
                         .anyRequest().authenticated())
+                // hub(antimony.kr)는 서버 없이 브라우저에서 코드를 토큰으로 바꾼다. 그 요청(POST /oauth2/token)만 hub 주소에서 허용한다.
+                .cors(cors -> cors.configurationSource(hubTokenCors(hubRedirectUri)))
                 // 브라우저 요청(HTML)이 로그인 안 된 상태로 오면 로그인 화면으로 보낸다.
                 // 서버 간 요청(/oauth2/token 등)은 리다이렉트하지 않고 401로 응답한다.
                 .exceptionHandling(exceptions -> exceptions
@@ -93,13 +100,27 @@ public class AuthorizationServerConfig {
         return http.build();
     }
 
+    // hub 주소(redirect_uri의 scheme://host[:port])에서 오는 토큰 요청만 허용한다. 쿠키는 쓰지 않는다.
+    private static UrlBasedCorsConfigurationSource hubTokenCors(String hubRedirectUri) {
+        URI uri = URI.create(hubRedirectUri);
+        String origin = uri.getScheme() + "://" + uri.getHost() + (uri.getPort() == -1 ? "" : ":" + uri.getPort());
+        CorsConfiguration config = new CorsConfiguration();
+        config.setAllowedOrigins(List.of(origin));
+        config.setAllowedMethods(List.of("POST"));
+        config.setAllowedHeaders(List.of("Content-Type"));
+        config.setAllowCredentials(false);
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/oauth2/token", config);
+        return source;
+    }
+
     // 로그인을 요청할 수 있는 앱 목록. DB(oauth2_registered_client)에 저장한다.
     @Bean
     public RegisteredClientRepository registeredClientRepository(JdbcOperations jdbcOperations) {
         return new JdbcRegisteredClientRepository(jdbcOperations);
     }
 
-    // 서버를 켤 때 설정값으로 blog 앱을 등록한다. 이미 있으면 같은 id로 덮어써서,
+    // 서버를 켤 때 설정값으로 blog, hub 앱을 등록한다. 이미 있으면 같은 id로 덮어써서,
     // 설정의 주소나 Client Secret을 바꾸면 다음 시작 때 반영된다.
     @Bean
     public ApplicationRunner registerClients(
@@ -107,13 +128,42 @@ public class AuthorizationServerConfig {
             PasswordEncoder passwordEncoder,
             @Value("${accounts.clients.blog.client-secret}") String blogClientSecret,
             @Value("${accounts.clients.blog.redirect-uri}") String blogRedirectUri,
-            @Value("${accounts.clients.blog.post-logout-redirect-uri}") String blogPostLogoutRedirectUri) {
+            @Value("${accounts.clients.blog.post-logout-redirect-uri}") String blogPostLogoutRedirectUri,
+            @Value("${accounts.clients.hub.redirect-uri}") String hubRedirectUri,
+            @Value("${accounts.clients.hub.post-logout-redirect-uri}") String hubPostLogoutRedirectUri) {
         return args -> {
-            RegisteredClient existing = registeredClientRepository.findByClientId("blog");
-            String id = existing != null ? existing.getId() : UUID.randomUUID().toString();
-            registeredClientRepository.save(blogClient(id, passwordEncoder.encode(blogClientSecret),
-                    blogRedirectUri, blogPostLogoutRedirectUri));
+            registeredClientRepository.save(blogClient(existingId(registeredClientRepository, "blog"),
+                    passwordEncoder.encode(blogClientSecret), blogRedirectUri, blogPostLogoutRedirectUri));
+            registeredClientRepository.save(hubClient(existingId(registeredClientRepository, "hub"),
+                    hubRedirectUri, hubPostLogoutRedirectUri));
         };
+    }
+
+    private static String existingId(RegisteredClientRepository repository, String clientId) {
+        RegisteredClient existing = repository.findByClientId(clientId);
+        return existing != null ? existing.getId() : UUID.randomUUID().toString();
+    }
+
+    // hub(antimony.kr 메인 페이지): 서버가 없는 정적 페이지라 Client Secret을 숨길 곳이 없다.
+    // 그래서 비밀 값 없는 공개 앱(public client)으로 등록하고, PKCE로 코드 가로채기를 막는다.
+    // 화면에 닉네임만 보여 주면 되므로 ID 토큰(profile 범위)만 쓰고, 리프레시 토큰은 발급하지 않는다(공개 앱의 기본값).
+    private static RegisteredClient hubClient(String id, String redirectUri, String postLogoutRedirectUri) {
+        return RegisteredClient.withId(id)
+                .clientId("hub")
+                .clientAuthenticationMethod(ClientAuthenticationMethod.NONE)
+                .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
+                .redirectUri(redirectUri)
+                .postLogoutRedirectUri(postLogoutRedirectUri)
+                .scope(OidcScopes.OPENID)
+                .scope(OidcScopes.PROFILE)
+                .clientSettings(ClientSettings.builder()
+                        .requireAuthorizationConsent(false)
+                        .requireProofKey(true)
+                        .build())
+                .tokenSettings(TokenSettings.builder()
+                        .accessTokenTimeToLive(Duration.ofMinutes(5))
+                        .build())
+                .build();
     }
 
     private static RegisteredClient blogClient(String id, String encodedClientSecret,
