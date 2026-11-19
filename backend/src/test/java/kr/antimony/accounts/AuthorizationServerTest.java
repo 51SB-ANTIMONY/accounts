@@ -2,6 +2,8 @@ package kr.antimony.accounts;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -37,7 +39,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest
+@SpringBootTest(properties = "accounts.clients.hub.additional-redirect-uris=https://antimony.kr/,https://www.antimony.kr/")
 @AutoConfigureMockMvc
 class AuthorizationServerTest {
 
@@ -193,8 +195,9 @@ class AuthorizationServerTest {
     }
 
     @DisplayName("hub(공개 앱): Client Secret 없이 PKCE만으로 코드를 토큰으로 바꾼다. ID 토큰에 닉네임이 있고, 리프레시 토큰은 없다.")
-    @Test
-    void hubPublicClientFlow() throws Exception {
+    @ParameterizedTest
+    @ValueSource(strings = {"http://localhost:5500/hub.html", "https://antimony.kr/", "https://www.antimony.kr/"})
+    void hubPublicClientFlow(String hubRedirectUri) throws Exception {
         userIdentityRepository.deleteAll();
         userRepository.deleteAll();
         User member = userRepository.save(User.builder()
@@ -206,7 +209,7 @@ class AuthorizationServerTest {
         AccountUserDetails details = new AccountUserDetails(member);
         String codeVerifier = newCodeVerifier();
 
-        MvcResult authorizeResult = mockMvc.perform(get(authorizeUri("hub", hubRedirectUri, "openid profile", "hub-state", codeChallenge(codeVerifier)))
+        MvcResult authorizeResult = mockMvc.perform(get(URI.create(authorizeUri("hub", hubRedirectUri, "openid profile", "hub-state", codeChallenge(codeVerifier)) + "&prompt=none"))
                         .with(authentication(UsernamePasswordAuthenticationToken.authenticated(details, null, details.getAuthorities()))))
                 .andExpect(status().is3xxRedirection())
                 .andReturn();
@@ -245,6 +248,25 @@ class AuthorizationServerTest {
                 .andExpect(status().is3xxRedirection())
                 .andExpect(redirectedUrl(hubRedirectUri));
 
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"https://antimony.kr/", "https://www.antimony.kr/"})
+    void hubSilentAuthorization_signedOut(String redirectUri) throws Exception {
+        URI uri = URI.create(authorizeUri("hub", redirectUri, "openid profile", "silent-state", codeChallenge(newCodeVerifier())) + "&prompt=none");
+        MvcResult result = mockMvc.perform(get(uri).accept(MediaType.TEXT_HTML))
+                .andExpect(status().is3xxRedirection()).andReturn();
+        String location = result.getResponse().getRedirectedUrl();
+        assertThat(location).startsWith(redirectUri + "?");
+        var query = UriComponentsBuilder.fromUriString(location).build().getQueryParams();
+        assertThat(query.getFirst("error")).isEqualTo("login_required");
+        assertThat(query.getFirst("state")).isEqualTo("silent-state");
+    }
+
+    @Test
+    void hubUnregisteredRedirect_isRejected() throws Exception {
+        mockMvc.perform(get(URI.create(authorizeUri("hub", "https://evil.antimony.kr/", "openid", "state", codeChallenge(newCodeVerifier())) + "&prompt=none")))
+                .andExpect(status().isBadRequest());
     }
 
     @DisplayName("hub(공개 앱): code_verifier가 없으면 토큰을 주지 않는다.")

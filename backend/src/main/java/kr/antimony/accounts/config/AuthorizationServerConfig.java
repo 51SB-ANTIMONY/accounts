@@ -58,6 +58,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 // OAuth 2.1 / OpenID Connect 인가 서버 설정
 // 인가 서버 주소(/oauth2/**, /.well-known/**, /userinfo, /connect/**)만 담당하는 필터 체인과,
@@ -70,7 +71,8 @@ public class AuthorizationServerConfig {
     @Order(1)
     public SecurityFilterChain authorizationServerSecurityFilterChain(HttpSecurity http,
                                                                       TokenBasedRememberMeServices rememberMeServices,
-                                                                      @Value("${accounts.clients.hub.redirect-uri}") String hubRedirectUri) throws Exception {
+                                                                      @Value("${accounts.clients.hub.redirect-uri}") String hubRedirectUri,
+                                                                      @Value("${accounts.clients.hub.additional-redirect-uris:}") List<String> hubAdditionalRedirectUris) throws Exception {
         // 전체 로그아웃(/connect/logout)에서 세션과 함께 "로그인 상태 유지" 쿠키도 지운다.
         // 쿠키가 남아 있으면 다음 로그인 요청 때 자동으로 다시 로그인되기 때문이다.
         OidcLogoutAuthenticationSuccessHandler logoutHandler = new OidcLogoutAuthenticationSuccessHandler();
@@ -85,9 +87,14 @@ public class AuthorizationServerConfig {
                             .logoutEndpoint(logout -> logout.logoutResponseHandler(logoutHandler)));
                 })
                 .authorizeHttpRequests(auth -> auth
+                        // 자동 확인은 로그인 화면으로 보내지 않고 인가 엔드포인트가 login_required로 응답한다.
+                        // 클라이언트·콜백·scope·PKCE 검증은 기존 인가 필터가 그대로 수행한다.
+                        .requestMatchers(request -> "GET".equals(request.getMethod())
+                                && (request.getContextPath() + "/oauth2/authorize").equals(request.getRequestURI())
+                                && "none".equals(request.getParameter("prompt"))).permitAll()
                         .anyRequest().authenticated())
                 // hub(antimony.kr)는 서버 없이 브라우저에서 코드를 토큰으로 바꾼다. 그 요청(POST /oauth2/token)만 hub 주소에서 허용한다.
-                .cors(cors -> cors.configurationSource(hubTokenCors(hubRedirectUri)))
+                .cors(cors -> cors.configurationSource(hubTokenCors(hubUris(hubRedirectUri, hubAdditionalRedirectUris))))
                 // 브라우저 요청(HTML)이 로그인 안 된 상태로 오면 로그인 화면으로 보낸다.
                 // 서버 간 요청(/oauth2/token 등)은 리다이렉트하지 않고 401로 응답한다.
                 .exceptionHandling(exceptions -> exceptions
@@ -100,12 +107,19 @@ public class AuthorizationServerConfig {
         return http.build();
     }
 
-    // hub 주소(redirect_uri의 scheme://host[:port])에서 오는 토큰 요청만 허용한다. 쿠키는 쓰지 않는다.
-    private static UrlBasedCorsConfigurationSource hubTokenCors(String hubRedirectUri) {
-        URI uri = URI.create(hubRedirectUri);
-        String origin = uri.getScheme() + "://" + uri.getHost() + (uri.getPort() == -1 ? "" : ":" + uri.getPort());
+    // 기본 주소와 운영 별칭을 합치되 빈 값과 중복을 제거한다.
+    private static List<String> hubUris(String primary, List<String> additional) {
+        return Stream.concat(Stream.of(primary), additional.stream())
+                .map(String::trim).filter(StringUtils::hasText).distinct().toList();
+    }
+
+    // 등록된 콜백의 origin에서 오는 토큰 요청만 허용한다. 쿠키는 쓰지 않는다.
+    private static UrlBasedCorsConfigurationSource hubTokenCors(List<String> hubRedirectUris) {
+        List<String> origins = hubRedirectUris.stream().map(URI::create)
+                .map(uri -> uri.getScheme() + "://" + uri.getHost() + (uri.getPort() == -1 ? "" : ":" + uri.getPort()))
+                .distinct().toList();
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(List.of(origin));
+        config.setAllowedOrigins(origins);
         config.setAllowedMethods(List.of("POST"));
         config.setAllowedHeaders(List.of("Content-Type"));
         config.setAllowCredentials(false);
@@ -130,12 +144,13 @@ public class AuthorizationServerConfig {
             @Value("${accounts.clients.blog.redirect-uri}") String blogRedirectUri,
             @Value("${accounts.clients.blog.post-logout-redirect-uri}") String blogPostLogoutRedirectUri,
             @Value("${accounts.clients.hub.redirect-uri}") String hubRedirectUri,
-            @Value("${accounts.clients.hub.post-logout-redirect-uri}") String hubPostLogoutRedirectUri) {
+            @Value("${accounts.clients.hub.post-logout-redirect-uri}") String hubPostLogoutRedirectUri,
+            @Value("${accounts.clients.hub.additional-redirect-uris:}") List<String> hubAdditionalRedirectUris) {
         return args -> {
             registeredClientRepository.save(blogClient(existingId(registeredClientRepository, "blog"),
                     passwordEncoder.encode(blogClientSecret), blogRedirectUri, blogPostLogoutRedirectUri));
             registeredClientRepository.save(hubClient(existingId(registeredClientRepository, "hub"),
-                    hubRedirectUri, hubPostLogoutRedirectUri));
+                    hubUris(hubRedirectUri, hubAdditionalRedirectUris), hubUris(hubPostLogoutRedirectUri, hubAdditionalRedirectUris)));
         };
     }
 
@@ -147,13 +162,13 @@ public class AuthorizationServerConfig {
     // hub(antimony.kr 메인 페이지): 서버가 없는 정적 페이지라 Client Secret을 숨길 곳이 없다.
     // 그래서 비밀 값 없는 공개 앱(public client)으로 등록하고, PKCE로 코드 가로채기를 막는다.
     // 화면에 닉네임만 보여 주면 되므로 ID 토큰(profile 범위)만 쓰고, 리프레시 토큰은 발급하지 않는다(공개 앱의 기본값).
-    private static RegisteredClient hubClient(String id, String redirectUri, String postLogoutRedirectUri) {
+    private static RegisteredClient hubClient(String id, List<String> redirectUris, List<String> postLogoutRedirectUris) {
         return RegisteredClient.withId(id)
                 .clientId("hub")
                 .clientAuthenticationMethod(ClientAuthenticationMethod.NONE)
                 .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
-                .redirectUri(redirectUri)
-                .postLogoutRedirectUri(postLogoutRedirectUri)
+                .redirectUris(uris -> uris.addAll(redirectUris))
+                .postLogoutRedirectUris(uris -> uris.addAll(postLogoutRedirectUris))
                 .scope(OidcScopes.OPENID)
                 .scope(OidcScopes.PROFILE)
                 .clientSettings(ClientSettings.builder()

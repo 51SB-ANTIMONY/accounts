@@ -8,8 +8,8 @@
 #   BLOG_CLIENT_SECRET                   blog 서버의 ACCOUNTS_CLIENT_SECRET과 같은 값
 #   BLOG_REDIRECT_URI                    예: https://blog.antimony.kr/login/oauth2/code/accounts
 #   BLOG_POST_LOGOUT_REDIRECT_URI        예: https://blog.antimony.kr/
-#   HUB_REDIRECT_URI                     (선택) 기본값 https://antimony.kr/
-#   HUB_POST_LOGOUT_REDIRECT_URI         (선택) 기본값 https://antimony.kr/
+#   HUB_REDIRECT_URI                     (선택) 기본값 https://www.antimony.kr/
+#   HUB_POST_LOGOUT_REDIRECT_URI         (선택) 기본값 https://www.antimony.kr/
 #   REMEMBER_ME_KEY                      로그인 상태 유지 쿠키 서명 키 (임의의 긴 문자열)
 #   SIGNING_KEY_PATH 또는 SIGNING_KEY_BASE64   토큰 서명용 RSA 개인 키 (파일 경로 또는 한 줄 내용). 만드는 법:
 #     openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out signing-key.pem
@@ -53,9 +53,11 @@ spring:
 accounts:
   clients:
     hub:
-      # 운영에서는 환경변수가 없어도 로컬 개발 주소로 돌아가지 않는다.
-      redirect-uri: ${HUB_REDIRECT_URI:https://antimony.kr/}
-      post-logout-redirect-uri: ${HUB_POST_LOGOUT_REDIRECT_URI:https://antimony.kr/}
+      # antimony.kr은 Vercel에서 www.antimony.kr로 이동하므로 실제 브라우저 주소와 맞춘다.
+      # 기존 HUB_* 환경변수는 유지하되 아래 두 운영 주소를 추가로 허용한다.
+      redirect-uri: ${HUB_REDIRECT_URI:https://www.antimony.kr/}
+      post-logout-redirect-uri: ${HUB_POST_LOGOUT_REDIRECT_URI:https://www.antimony.kr/}
+      additional-redirect-uris: https://antimony.kr/,https://www.antimony.kr/
   signing-key:
     # 운영에서는 반드시 저장해 둔 키를 쓴다. 둘 다 없으면 서버가 켜지지 않는다.
     required: true

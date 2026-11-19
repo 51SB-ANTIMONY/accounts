@@ -92,9 +92,9 @@ PC와 모바일(가로 1023px 이하), 라이트·다크 모드를 지원합니�
 | client_id | 인증 방식 | redirect_uri | scope | 토큰 수명 |
 |---|---|---|---|---|
 | `blog` | `client_secret_basic` + PKCE | `http://localhost:3000/login/oauth2/code/accounts` (blog 화면 Next.js를 거친 주소) | `openid`, `profile`, `email` | 액세스 30분, 리프레시 14일 (재발급 시 교체) |
-| `hub` | 없음(공개 앱) + PKCE | `http://localhost:5500/hub.html` (운영 `https://antimony.kr/`, `HUB_REDIRECT_URI`) | `openid`, `profile` | 액세스 5분, 리프레시 없음 |
+| `hub` | 없음(공개 앱) + PKCE | `http://localhost:5500/hub.html` (운영 `https://antimony.kr/`, `https://www.antimony.kr/`) | `openid`, `profile` | 액세스 5분, 리프레시 없음 |
 
-`hub`(antimony.kr 메인 페이지)는 서버 없는 정적 페이지라서 브라우저가 직접 `POST /oauth2/token`을 보냅니다. 그래서 이 주소만 hub 주소(redirect_uri의 origin)에서 오는 CORS 요청을 허용합니다(쿠키 없음).
+`hub`(antimony.kr 메인 페이지)는 서버 없는 정적 페이지라서 브라우저가 직접 `POST /oauth2/token`을 보냅니다. 그래서 이 엔드포인트만 등록된 hub 콜백의 origin에서 오는 CORS 요청을 허용합니다(쿠키 없음). 운영에서는 `antimony.kr`와 `www.antimony.kr`를 로그인·로그아웃 콜백과 CORS에 모두 등록합니다. `application-prod.yml`의 `additional-redirect-uris`가 두 주소를 추가하므로 기존 `HUB_REDIRECT_URI`, `HUB_POST_LOGOUT_REDIRECT_URI` 환경변수도 유지할 수 있습니다. 서버 재시작 시 DB의 클라이언트 등록을 갱신합니다. `prompt=none` 자동 확인은 인가 엔드포인트에서 직접 검증하며, 미로그인 시 로그인 화면 대신 `error=login_required`로 허브에 돌아갑니다. 허브는 인증을 시작한 origin으로 돌아오며 `/hub.html`, `/index.html` 접속은 인증 전에 같은 origin의 `/`로 정리합니다.
 
 자사 앱이므로 동의 화면은 생략합니다.
 
