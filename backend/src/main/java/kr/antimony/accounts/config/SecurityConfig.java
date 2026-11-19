@@ -22,6 +22,12 @@ import org.springframework.security.web.servlet.util.matcher.PathPatternRequestM
 import org.springframework.security.web.util.matcher.NegatedRequestMatcher;
 
 import java.time.Duration;
+import java.net.URI;
+import java.util.List;
+import java.util.stream.Stream;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.security.web.util.matcher.OrRequestMatcher;
 
 import static org.springframework.boot.security.autoconfigure.web.servlet.PathRequest.toH2Console;
 
@@ -61,8 +67,12 @@ public class SecurityConfig {
     @Bean
     @Order(2)
     public SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http,
-                                                          TokenBasedRememberMeServices rememberMeServices) throws Exception {
+                                                          TokenBasedRememberMeServices rememberMeServices,
+                                                          @Value("${accounts.clients.hub.redirect-uri}") String hubRedirectUri,
+                                                          @Value("${accounts.clients.hub.additional-redirect-uris:}") List<String> additionalHubUris,
+                                                          @Value("${accounts.session.additional-allowed-origins:}") List<String> additionalSessionOrigins) throws Exception {
         return http
+                .cors(cors -> cors.configurationSource(sessionCors(hubRedirectUri, additionalHubUris, additionalSessionOrigins)))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/csrf", "/api/auth/providers",
                                 "/api/signup/**", "/api/find-id/**", "/api/password-reset/**", "/error",
@@ -87,7 +97,13 @@ public class SecurityConfig {
                         .failureHandler(socialLoginFailureHandler()))
                 // accounts에서의 로그아웃 (POST /logout). 세션과 "로그인 상태 유지" 쿠키를 지운다.
                 .logout(logout -> logout
-                        .logoutSuccessUrl("/login?logout"))
+                        .logoutRequestMatcher(new OrRequestMatcher(
+                                PathPatternRequestMatcher.withDefaults().matcher(org.springframework.http.HttpMethod.POST, "/logout"),
+                                PathPatternRequestMatcher.withDefaults().matcher(org.springframework.http.HttpMethod.POST, "/api/logout")))
+                        .logoutSuccessHandler((request, response, authentication) -> {
+                            if (request.getRequestURI().equals(request.getContextPath() + "/api/logout")) response.setStatus(204);
+                            else response.sendRedirect("/login?logout");
+                        }))
                 // 로그인 후 돌아갈 주소로 API 요청은 기억하지 않는다. (화면이 보낸 /api/me 401 뒤에 로그인하면 JSON으로 이동하는 문제)
                 .requestCache(cache -> cache.requestCache(requestCache()))
                 // API는 로그인 화면으로 보내지 않고 401로 응답한다.
@@ -96,6 +112,22 @@ public class SecurityConfig {
                                 new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED),
                                 PathPatternRequestMatcher.withDefaults().matcher("/api/**")))
                 .build();
+    }
+
+    private static UrlBasedCorsConfigurationSource sessionCors(String primary, List<String> additional, List<String> serviceOrigins) {
+        List<String> origins = Stream.concat(Stream.concat(Stream.of(primary), additional.stream()), serviceOrigins.stream())
+                .map(String::trim).filter(value -> !value.isEmpty()).map(URI::create)
+                .map(uri -> uri.getScheme() + "://" + uri.getHost() + (uri.getPort() == -1 ? "" : ":" + uri.getPort()))
+                .distinct().toList();
+        CorsConfiguration config = new CorsConfiguration();
+        config.setAllowedOrigins(origins);
+        config.setAllowedMethods(List.of("GET", "POST"));
+        config.setAllowedHeaders(List.of("X-XSRF-TOKEN", "Content-Type"));
+        config.setAllowCredentials(true);
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/api/session", config);
+        source.registerCorsConfiguration("/api/logout", config);
+        return source;
     }
 
     // 소셜 로그인 실패 시 오류 코드를 붙여 로그인 화면으로 보낸다. 예: /login?social_error=email_already_registered

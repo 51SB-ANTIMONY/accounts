@@ -40,7 +40,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 // 로그인 상태와 관련된 API: 소셜 제공자 목록, 내 계정, 로그인 상태 유지, 로그아웃
-@SpringBootTest
+@SpringBootTest(properties = "accounts.session.additional-allowed-origins=https://service.antimony.kr")
 @AutoConfigureMockMvc
 @Import({TestSupportConfig.class, DatabaseCleaner.class})
 class AccountSessionApiTest {
@@ -56,6 +56,37 @@ class AccountSessionApiTest {
     @BeforeEach
     void setUp() {
         databaseCleaner.clean();
+    }
+
+    @Test
+    void sessionCorsAndLogout() throws Exception {
+        String origin = "http://localhost:5500";
+        mockMvc.perform(get("/api/session").header("Origin", origin))
+                .andExpect(status().isUnauthorized())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header().string("Access-Control-Allow-Origin", origin))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header().string("Access-Control-Allow-Credentials", "true"));
+        mockMvc.perform(get("/api/session").header("Origin", "https://untrusted.example"))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/session").header("Origin", "https://service.antimony.kr"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header().string("Access-Control-Allow-Origin", "https://service.antimony.kr"));
+        User user = TestUsers.localUser(userRepository, passwordEncoder, "hubuser", "hub@antimony.kr", "허브", "pass1234!");
+        MvcResult result = mockMvc.perform(get("/api/session").header("Origin", origin)
+                        .with(authentication(TestUsers.loggedIn(user))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.nickname").value("허브"))
+                .andExpect(jsonPath("$.email").doesNotExist())
+                .andExpect(jsonPath("$.token").isString())
+                .andReturn();
+        var data = objectMapper.readTree(result.getResponse().getContentAsString());
+        mockMvc.perform(post("/api/logout").header("Origin", origin))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/logout").header("Origin", origin)
+                        .cookie(result.getResponse().getCookies())
+                        .param(data.get("parameterName").asText(), data.get("token").asText())
+                        .with(authentication(TestUsers.loggedIn(user))))
+                .andExpect(status().isNoContent())
+                .andExpect(cookie().maxAge("ACCOUNTS_REMEMBER_ME", 0));
     }
 
     @DisplayName("소셜 제공자: 설정에 등록된 Google만 사용 가능")
